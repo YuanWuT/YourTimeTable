@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "录入课程表",
+  "usingComponents": {
+    "login-panel": "../../components/login-panel/login-panel"
+  }
+}

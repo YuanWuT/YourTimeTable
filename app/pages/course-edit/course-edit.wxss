@@ -1,0 +1,151 @@
+.edit-page {
+    padding-top: 28rpx;
+}
+
+.error-card {
+    padding: 24rpx 26rpx;
+    margin-bottom: 20rpx;
+    background: #fff3f1;
+    border: 2rpx solid #ffd9d2;
+    border-radius: 20rpx;
+}
+
+.error-desc {
+    font-size: 26rpx;
+    color: #b94c37;
+    line-height: 1.6;
+}
+
+.retry-btn {
+    margin-top: 18rpx;
+    width: 180rpx;
+}
+
+.picker-value {
+    min-height: 84rpx;
+    padding: 18rpx 22rpx;
+    background: #f7f9fd;
+    border: 2rpx solid #e8ecf3;
+    border-radius: 16rpx;
+    font-size: 28rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.picker-arrow {
+    color: #8a94a6;
+    font-size: 34rpx;
+}
+
+.time-row {
+    display: flex;
+    align-items: flex-start;
+}
+
+.time-row .field {
+    min-width: 0;
+}
+
+.time-dash {
+    width: 44rpx;
+    flex: none;
+    text-align: center;
+    line-height: 116rpx;
+    color: #8a94a6;
+}
+
+.option-row {
+    display: flex;
+}
+
+.option {
+    flex: 1;
+    text-align: center;
+    padding: 18rpx 0;
+    margin-right: 12rpx;
+    background: #f2f5fa;
+    border: 2rpx solid transparent;
+    border-radius: 14rpx;
+    font-size: 25rpx;
+    color: #5a6478;
+}
+
+.option:last-child {
+    margin-right: 0;
+}
+
+.option-active {
+    background: #eaf1ff;
+    border-color: #2f6bed;
+    color: #2f6bed;
+    font-weight: 600;
+}
+
+.color-row {
+    display: flex;
+    flex-wrap: wrap;
+    margin-top: 16rpx;
+}
+
+.color-item {
+    width: 31%;
+    margin: 0 2% 16rpx 0;
+    padding: 18rpx 14rpx;
+    border: 3rpx solid transparent;
+    border-radius: 16rpx;
+    display: flex;
+    align-items: center;
+    position: relative;
+}
+
+.color-item:nth-child(3n) {
+    margin-right: 0;
+}
+
+.color-dot {
+    width: 24rpx;
+    height: 24rpx;
+    border-radius: 50%;
+    flex: none;
+    margin-right: 10rpx;
+}
+
+.color-name {
+    font-size: 22rpx;
+    font-weight: 600;
+}
+
+.color-check {
+    position: absolute;
+    right: 12rpx;
+    top: 8rpx;
+    font-size: 22rpx;
+}
+
+.switch-row {
+    padding: 12rpx 0 20rpx;
+    font-size: 27rpx;
+}
+
+.danger-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12rpx 0 24rpx;
+}
+
+.danger-zone button {
+    width: 100%;
+}
+
+.danger-note {
+    margin-top: 12rpx;
+    font-size: 22rpx;
+    color: #8a94a6;
+}
+
+.bar-cancel {
+    width: 180rpx;
+    margin-right: 16rpx;
+}

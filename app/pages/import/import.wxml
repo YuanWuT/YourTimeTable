@@ -1,0 +1,105 @@
+<view class="page page-safe import-page">
+    <block wx:if="{{authState === 'checking'}}">
+        <view class="loading-box">
+            <view class="spinner"></view>
+            <text class="empty-desc">正在检查登录状态…</text>
+        </view>
+    </block>
+
+    <block wx:elif="{{authState === 'signed-out'}}">
+        <login-panel title="登录后导入课程表" bind:signedin="onSignedIn" bind:demo="onDemo" />
+    </block>
+
+    <block wx:else>
+        <view class="intro-card">
+            <text class="intro-kicker">IMPORT COURSES</text>
+            <text class="intro-title">把课表搬进来</text>
+            <text class="intro-desc">四种方式任选，录入结果都保存到云端。换手机、换设备，登录后依然在。</text>
+        </view>
+
+        <view class="card">
+            <text class="section-title">选择录入方式</text>
+            <text class="section-sub">识别结果会先让你确认，再批量写入课表</text>
+            <view wx:for="{{entries}}" wx:key="key" class="entry-item" data-key="{{item.key}}" bindtap="onEntry">
+                <view class="entry-icon"><text>{{item.icon}}</text></view>
+                <view class="grow">
+                    <view class="row">
+                        <text class="entry-title">{{item.title}}</text>
+                        <text class="entry-tag">{{item.tag}}</text>
+                    </view>
+                    <text class="entry-desc">{{item.desc}}</text>
+                </view>
+                <text class="entry-arrow">›</text>
+            </view>
+        </view>
+
+        <view wx:if="{{busy}}" class="busy-card">
+            <view class="spinner"></view>
+            <text class="busy-text">{{busyText}}</text>
+            <text class="busy-sub">照片识别需要几秒到十几秒，请不要关闭页面</text>
+        </view>
+
+        <view wx:if="{{errorText}}" class="error-card">
+            <text class="error-title">这一步没能完成</text>
+            <text class="error-desc">{{errorText}}</text>
+            <button class="plain-btn retry-btn" bindtap="clearError">知道了</button>
+        </view>
+
+        <!-- 粘贴文字 -->
+        <view wx:if="{{textPanelVisible}}" class="card">
+            <text class="section-title">粘贴课表文字</text>
+            <text class="section-sub">支持「周一 08:00-08:45 高等数学 教三201」这类写法，也支持整段课表</text>
+            <textarea class="textarea" placeholder="在这里粘贴课表内容…" placeholder-class="input-placeholder"
+                      value="{{textInput}}" bindinput="onTextInput" maxlength="6000" />
+            <view class="row text-actions">
+                <button class="plain-btn grow" bindtap="closeTextPanel">取消</button>
+                <button class="primary-btn grow" bindtap="submitText" disabled="{{busy}}">智能整理</button>
+            </view>
+        </view>
+
+        <!-- 识别 / 解析结果确认 -->
+        <view wx:if="{{reviewVisible}}" class="card review-card">
+            <view class="row-between">
+                <text class="section-title">确认导入 · {{reviewSource}}</text>
+                <text class="review-toggle" bindtap="toggleAll">全选 / 取消</text>
+            </view>
+            <text class="section-sub">已选 {{selectedCount}} / {{reviewCourses.length}} 节，导入后可在课表页逐条编辑</text>
+
+            <view wx:for="{{reviewCourses}}" wx:key="id" class="review-item" style="border-left:8rpx solid {{item.solid}}">
+                <view class="review-check {{item.checked ? 'review-check-on' : ''}}" data-index="{{index}}" bindtap="toggleReviewItem">
+                    <text wx:if="{{item.checked}}">✓</text>
+                </view>
+                <view class="grow">
+                    <text class="review-title">{{item.title}}</text>
+                    <text class="review-meta">{{item.dayText}} {{item.timeText}} · {{item.locationText}} · {{item.weekText}}</text>
+                </view>
+                <text class="review-remove" data-index="{{index}}" catchtap="removeReviewItem">移除</text>
+            </view>
+
+            <button class="primary-btn review-confirm" loading="{{importing}}" disabled="{{importing}}" bindtap="confirmImport">
+                导入 {{selectedCount}} 节课
+            </button>
+            <button class="plain-btn" bindtap="cancelReview">放弃本次结果</button>
+        </view>
+
+        <!-- 表格格式说明 -->
+        <view class="card format-card">
+            <text class="section-title">Excel 表格怎么填</text>
+            <view class="format-block">
+                <text class="format-label">方式一 · 一行一节课</text>
+                <text class="format-text">表头包含：课程名称、星期、开始时间、结束时间、地点、教师、单双周（可选）</text>
+            </view>
+            <view class="format-block">
+                <text class="format-label">方式二 · 常见课表矩阵</text>
+                <text class="format-text">第一列为时间段（如 08:00-08:45），表头为周一 ~ 周日，单元格写课程名，可用换行附上地点和老师</text>
+            </view>
+            <text class="format-note">支持 .xlsx 与 UTF-8 编码的 .csv；旧版 .xls 请先另存为 .xlsx。文件需先发送到微信聊天记录，再在这里选择。</text>
+            <text class="format-note">单双周标记可以写在课程名里，例如「大学英语（单周）」。</text>
+        </view>
+
+        <view class="settings-link" bindtap="goSettings">
+            <text>作息时间、开学日期与提醒设置</text>
+            <text>›</text>
+        </view>
+    </block>
+</view>

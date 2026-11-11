@@ -1,0 +1,251 @@
+.import-page {
+    padding-top: 28rpx;
+}
+
+.intro-card {
+    padding: 36rpx 32rpx;
+    margin-bottom: 24rpx;
+    border-radius: 28rpx;
+    background: linear-gradient(135deg, #2f6bed 0%, #6a9bff 100%);
+    display: flex;
+    flex-direction: column;
+}
+
+.intro-kicker {
+    font-size: 20rpx;
+    letter-spacing: 3rpx;
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.intro-title {
+    font-size: 40rpx;
+    font-weight: 700;
+    color: #ffffff;
+    margin-top: 10rpx;
+}
+
+.intro-desc {
+    font-size: 24rpx;
+    line-height: 1.7;
+    color: rgba(255, 255, 255, 0.9);
+    margin-top: 12rpx;
+}
+
+.entry-item {
+    display: flex;
+    align-items: center;
+    padding: 24rpx 0;
+    border-bottom: 2rpx solid #e8ecf3;
+}
+
+.entry-item:last-child {
+    border-bottom: none;
+    padding-bottom: 4rpx;
+}
+
+.entry-icon {
+    width: 84rpx;
+    height: 84rpx;
+    flex: none;
+    border-radius: 22rpx;
+    background: #eaf1ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 38rpx;
+    margin-right: 22rpx;
+}
+
+.entry-title {
+    font-size: 29rpx;
+    font-weight: 600;
+}
+
+.entry-tag {
+    margin-left: 12rpx;
+    font-size: 19rpx;
+    color: #2f6bed;
+    background: #eaf1ff;
+    padding: 3rpx 12rpx;
+    border-radius: 999rpx;
+}
+
+.entry-desc {
+    display: block;
+    margin-top: 6rpx;
+    font-size: 23rpx;
+    color: #8a94a6;
+    line-height: 1.5;
+}
+
+.entry-arrow {
+    font-size: 40rpx;
+    color: #c3cad7;
+    margin-left: 12rpx;
+}
+
+.busy-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 44rpx 28rpx;
+    margin-bottom: 24rpx;
+    background: #ffffff;
+    border: 2rpx solid #e8ecf3;
+    border-radius: 24rpx;
+}
+
+.busy-text {
+    margin-top: 20rpx;
+    font-size: 28rpx;
+    font-weight: 600;
+}
+
+.busy-sub {
+    margin-top: 8rpx;
+    font-size: 22rpx;
+    color: #8a94a6;
+}
+
+.error-card {
+    padding: 32rpx;
+    margin-bottom: 24rpx;
+    background: #fff3f1;
+    border: 2rpx solid #ffd9d2;
+    border-radius: 24rpx;
+}
+
+.error-title {
+    display: block;
+    font-size: 29rpx;
+    font-weight: 600;
+    color: #b94c37;
+}
+
+.error-desc {
+    display: block;
+    margin-top: 10rpx;
+    font-size: 25rpx;
+    color: #a4624f;
+    line-height: 1.6;
+}
+
+.retry-btn {
+    margin-top: 22rpx;
+    width: 200rpx;
+}
+
+.text-actions {
+    margin-top: 20rpx;
+}
+
+.text-actions button {
+    margin: 0 10rpx;
+}
+
+.review-toggle {
+    font-size: 24rpx;
+    color: #2f6bed;
+}
+
+.review-item {
+    display: flex;
+    align-items: center;
+    padding: 20rpx 18rpx;
+    margin-top: 16rpx;
+    background: #f8fafd;
+    border-radius: 14rpx;
+}
+
+.review-check {
+    width: 40rpx;
+    height: 40rpx;
+    flex: none;
+    border-radius: 10rpx;
+    border: 3rpx solid #cbd4e3;
+    margin-right: 18rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-size: 24rpx;
+}
+
+.review-check-on {
+    background: #2f6bed;
+    border-color: #2f6bed;
+}
+
+.review-title {
+    display: block;
+    font-size: 28rpx;
+    font-weight: 600;
+}
+
+.review-meta {
+    display: block;
+    margin-top: 6rpx;
+    font-size: 22rpx;
+    color: #5a6478;
+    line-height: 1.5;
+}
+
+.review-remove {
+    font-size: 23rpx;
+    color: #d95050;
+    margin-left: 12rpx;
+    flex: none;
+}
+
+.review-confirm {
+    margin-top: 30rpx;
+    height: 88rpx;
+    line-height: 88rpx;
+    padding: 0;
+}
+
+.review-card > .plain-btn {
+    margin-top: 16rpx;
+}
+
+.format-block {
+    margin-top: 22rpx;
+    padding: 20rpx 22rpx;
+    background: #f7f9fd;
+    border-radius: 16rpx;
+}
+
+.format-label {
+    display: block;
+    font-size: 26rpx;
+    font-weight: 600;
+    color: #2f6bed;
+}
+
+.format-text {
+    display: block;
+    margin-top: 8rpx;
+    font-size: 23rpx;
+    color: #5a6478;
+    line-height: 1.7;
+}
+
+.format-note {
+    display: block;
+    margin-top: 16rpx;
+    font-size: 22rpx;
+    color: #8a94a6;
+    line-height: 1.6;
+}
+
+.settings-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 28rpx 30rpx;
+    background: #ffffff;
+    border: 2rpx solid #e8ecf3;
+    border-radius: 20rpx;
+    font-size: 26rpx;
+    color: #5a6478;
+}

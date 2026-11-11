@@ -1,0 +1,161 @@
+.settings-page {
+    padding-top: 28rpx;
+}
+
+.error-card {
+    padding: 24rpx 26rpx;
+    margin-bottom: 20rpx;
+    background: #fff3f1;
+    border: 2rpx solid #ffd9d2;
+    border-radius: 20rpx;
+}
+
+.error-desc {
+    font-size: 26rpx;
+    color: #b94c37;
+    line-height: 1.6;
+}
+
+.link-text {
+    font-size: 24rpx;
+    color: #2f6bed;
+}
+
+.setting-field {
+    margin-top: 24rpx;
+    margin-bottom: 0;
+}
+
+.picker-value {
+    min-height: 84rpx;
+    padding: 18rpx 22rpx;
+    background: #f7f9fd;
+    border: 2rpx solid #e8ecf3;
+    border-radius: 16rpx;
+    font-size: 28rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.picker-arrow {
+    color: #8a94a6;
+    font-size: 34rpx;
+}
+
+.period-head {
+    display: flex;
+    align-items: center;
+    margin-top: 24rpx;
+    padding: 0 4rpx 10rpx;
+}
+
+.period-head text {
+    font-size: 21rpx;
+    color: #8a94a6;
+}
+
+.ph-label {
+    width: 34%;
+    flex: none;
+}
+
+.ph-time {
+    width: 25%;
+    flex: none;
+}
+
+.ph-del {
+    width: 10%;
+    flex: none;
+}
+
+.period-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12rpx;
+}
+
+.period-input {
+    min-height: 76rpx;
+    padding: 12rpx 10rpx;
+    margin-right: 8rpx;
+    background: #f7f9fd;
+    border: 2rpx solid #e8ecf3;
+    border-radius: 12rpx;
+    font-size: 24rpx;
+}
+
+.del-icon {
+    display: block;
+    text-align: center;
+    font-size: 34rpx;
+    color: #d95050;
+    line-height: 1;
+}
+
+.period-actions {
+    display: flex;
+    margin-top: 20rpx;
+}
+
+.period-actions button {
+    margin: 0 8rpx;
+    font-size: 26rpx;
+}
+
+.switch-row {
+    padding: 16rpx 0 8rpx;
+    font-size: 27rpx;
+}
+
+.remind-row {
+    display: flex;
+    align-items: center;
+    padding: 20rpx 0;
+    border-top: 2rpx solid #e8ecf3;
+}
+
+.remind-title {
+    display: block;
+    font-size: 27rpx;
+    font-weight: 600;
+}
+
+.remind-status {
+    display: block;
+    margin-top: 6rpx;
+    font-size: 22rpx;
+    color: #8a94a6;
+    line-height: 1.5;
+}
+
+.remind-btn {
+    width: 180rpx;
+    flex: none;
+    font-size: 24rpx;
+    margin-left: 12rpx;
+    padding: 0 10rpx;
+}
+
+.notice-box {
+    margin-top: 16rpx;
+    padding: 22rpx 24rpx;
+    background: #f7f9fd;
+    border-radius: 16rpx;
+}
+
+.notice-title {
+    display: block;
+    font-size: 25rpx;
+    font-weight: 600;
+    color: #2f6bed;
+}
+
+.notice-text {
+    display: block;
+    margin-top: 8rpx;
+    font-size: 22rpx;
+    color: #5a6478;
+    line-height: 1.7;
+}

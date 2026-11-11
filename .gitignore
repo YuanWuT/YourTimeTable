@@ -1,0 +1,20 @@
+# 微信开发者工具「构建 npm」产物（若生成则不入库，避免与 node_modules 重复）
+app/miniprogram_npm/
+
+# 微信开发者工具 / 编辑器的个人本地配置（每台机器可能不同）
+project.private.config.json
+.idea/
+.vscode/
+*.swp
+
+# 系统与临时文件
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+.tmp/
+
+# 说明：app/node_modules 有意入库（约 1.6 MB 云 SDK）。
+# 目的是另一台电脑 pull 后开箱即用，SDK 版本与本机完全一致，无需 npm install / 联网。
+# package-lock.json 同样入库，作为依赖版本的唯一权威记录。
+# .genie 应用卡、.workbuddy 项目配置、隐私清单均为项目资产，需要入库。

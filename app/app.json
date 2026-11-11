@@ -1,0 +1,45 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/import/import",
+    "pages/profile/profile",
+    "pages/course-edit/course-edit",
+    "pages/settings/settings"
+  ],
+  "window": {
+    "navigationBarTitleText": "你的课程表",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f5f7fb",
+    "backgroundTextStyle": "light"
+  },
+  "tabBar": {
+    "color": "#8a94a6",
+    "selectedColor": "#2f6bed",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "课表",
+        "iconPath": "assets/tab/calendar.png",
+        "selectedIconPath": "assets/tab/calendar-on.png"
+      },
+      {
+        "pagePath": "pages/import/import",
+        "text": "录入",
+        "iconPath": "assets/tab/add.png",
+        "selectedIconPath": "assets/tab/add-on.png"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "我的",
+        "iconPath": "assets/tab/user.png",
+        "selectedIconPath": "assets/tab/user-on.png"
+      }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

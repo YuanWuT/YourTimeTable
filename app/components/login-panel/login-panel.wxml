@@ -1,0 +1,31 @@
+<view class="login-card">
+    <view class="login-logo">
+        <text class="login-logo-text">课</text>
+    </view>
+    <text class="login-title">{{title}}</text>
+    <text class="login-desc">用微信登录后，课程表保存在云端。换手机、重装微信，重新登录同一个微信就能看到原来的课表。</text>
+
+    <view class="login-points">
+        <view class="login-point">
+            <text class="login-point-dot"></text>
+            <text>云端同步，多设备随时查看</text>
+        </view>
+        <view class="login-point">
+            <text class="login-point-dot"></text>
+            <text>学生 / 家长 / 老师三种身份</text>
+        </view>
+        <view class="login-point">
+            <text class="login-point-dot"></text>
+            <text>单双周、月视图与上课提醒</text>
+        </view>
+    </view>
+
+    <button class="primary-btn login-button" loading="{{loggingIn}}" disabled="{{loggingIn}}" bindtap="onWechatLogin">
+        微信一键登录
+    </button>
+    <button class="login-demo" bindtap="onDemo">先看看示例课表</button>
+
+    <view wx:if="{{errorText}}" class="login-error">
+        <text>{{errorText}}</text>
+    </view>
+</view>

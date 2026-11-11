@@ -1,0 +1,194 @@
+<view class="page index-page">
+    <!-- 状态栏、胶囊按钮、44px 导航栏全部交给微信原生导航栏；页面内容从导航栏下方开始，不占用胶囊与安全区 -->
+    <block wx:if="{{authState === 'checking' && !demoMode}}">
+        <view class="loading-box">
+            <view class="spinner"></view>
+            <text class="empty-desc">正在连接云端课表…</text>
+        </view>
+    </block>
+
+    <block wx:elif="{{authState === 'signed-out' && !demoMode}}">
+        <login-panel title="登录后查看我的课程表" bind:signedin="onSignedIn" bind:demo="useDemo" />
+    </block>
+
+    <block wx:else>
+        <view wx:if="{{demoMode}}" class="demo-banner" bindtap="showLogin">
+            <view class="grow">
+                <text class="demo-banner-title">示例课表</text>
+                <text class="demo-banner-desc">仅用于预览界面，登录后查看你自己的课表</text>
+            </view>
+            <text class="demo-banner-action">微信登录 ›</text>
+        </view>
+
+        <view wx:if="{{errorText}}" class="error-card">
+            <text class="error-title">暂时没能加载课表</text>
+            <text class="error-desc">{{errorText}}</text>
+            <button class="ghost-btn retry-btn" bindtap="onRetry">重新加载</button>
+        </view>
+
+        <view wx:elif="{{loading}}" class="loading-box">
+            <view class="spinner"></view>
+            <text class="empty-desc">正在同步课程表…</text>
+        </view>
+
+        <block wx:else>
+            <!-- 身份 + 视图切换 -->
+            <view class="header-card">
+                <view class="header-top">
+                    <view class="role-chip" bindtap="openRolePicker">
+                        <text class="role-icon">{{roleIcon}}</text>
+                        <text class="role-name">{{roleName}}</text>
+                        <text class="role-caret">▾</text>
+                    </view>
+                    <view class="seg header-seg">
+                        <view class="seg-item {{viewMode === 'week' ? 'seg-item-active' : ''}}" data-mode="week" bindtap="switchView">周视图</view>
+                        <view class="seg-item {{viewMode === 'month' ? 'seg-item-active' : ''}}" data-mode="month" bindtap="switchView">月视图</view>
+                    </view>
+                </view>
+
+                <view class="week-nav">
+                    <view class="nav-arrow" data-step="-1" bindtap="changeWeek">‹</view>
+                    <view class="week-mid" bindtap="goToday">
+                        <text class="week-label">{{weekLabel}}</text>
+                        <text class="week-range">{{dateRange}} · 点此回本周</text>
+                    </view>
+                    <view class="nav-arrow" data-step="1" bindtap="changeWeek">›</view>
+                </view>
+
+                <view class="parity-row">
+                    <text class="parity-label">显示</text>
+                    <view class="chip {{parityMode === 'odd' ? 'chip-active' : ''}}" data-mode="odd" bindtap="chooseParity">单周</view>
+                    <view class="chip {{parityMode === 'even' ? 'chip-active' : ''}}" data-mode="even" bindtap="chooseParity">双周</view>
+                    <view class="chip {{parityMode === 'all' ? 'chip-active' : ''}}" data-mode="all" bindtap="chooseParity">全部</view>
+                </view>
+            </view>
+
+            <!-- 下一节课 -->
+            <view wx:if="{{nextCourse}}" class="next-card">
+                <view class="next-left">
+                    <text class="next-kicker">下一节课 · {{nextCourse.when}}</text>
+                    <text class="next-title">{{nextCourse.title}}</text>
+                    <text class="next-meta">{{nextCourse.timeText}} · {{nextCourse.locationText}}</text>
+                </view>
+                <view class="next-right">
+                    <text class="next-count">{{nextCourse.countdown}}</text>
+                </view>
+            </view>
+
+            <!-- 周视图 -->
+            <block wx:if="{{viewMode === 'week'}}">
+                <view wx:if="{{courseCount === 0}}" class="empty-card">
+                    <view class="empty-icon">＋</view>
+                    <text class="empty-title">还没有课程</text>
+                    <text class="empty-desc">去「录入」页手动添加、拍照识别，或上传 Excel 表格</text>
+                    <button class="ghost-btn empty-btn" bindtap="onAdd">添加第一节课</button>
+                </view>
+
+                <view wx:else class="grid-card">
+                    <view class="time-rail">
+                        <view class="rail-head"><text>时间</text></view>
+                        <view wx:for="{{timeRail}}" wx:key="sort_no" class="rail-row">
+                            <text class="rail-label">{{item.label}}</text>
+                            <text class="rail-time">{{item.start_time}}</text>
+                            <text class="rail-time">{{item.end_time}}</text>
+                        </view>
+                    </view>
+                    <scroll-view class="days-scroll" scroll-x="true" scroll-into-view="{{scrollIntoId}}">
+                        <view class="days-inner">
+                            <view wx:for="{{weekColumns}}" wx:key="key" id="{{item.id}}" class="day-col">
+                                <view class="day-head {{item.isToday ? 'day-head-today' : ''}}">
+                                    <text class="day-name">{{item.dayName}}</text>
+                                    <text class="day-date">{{item.dateLabel}}</text>
+                                </view>
+                                <view wx:for="{{item.cells}}" wx:for-item="cell" wx:key="key" class="grid-cell">
+                                    <view wx:for="{{cell.courses}}" wx:for-item="course" wx:key="id"
+                                          class="course-chip"
+                                          style="background:{{course.bg}};color:{{course.fg}};border-left:6rpx solid {{course.solid}}"
+                                          data-id="{{course.id}}" bindtap="onCourseTap">
+                                        <text class="chip-title">{{course.title}}</text>
+                                        <text class="chip-time">{{course.timeText}}</text>
+                                        <text class="chip-place">{{course.locationText}}</text>
+                                        <text wx:if="{{course.weekText !== '每周'}}" class="chip-week">{{course.weekText}}</text>
+                                    </view>
+                                </view>
+                            </view>
+                        </view>
+                    </scroll-view>
+                </view>
+                <view class="grid-tip">本周共 {{weekTotal}} 节课 · 左右滑动查看周一到周日 · 点课程卡片可编辑</view>
+            </block>
+
+            <!-- 月视图 -->
+            <block wx:else>
+                <view class="month-card">
+                    <view class="month-nav">
+                        <view class="nav-arrow" data-step="-1" bindtap="changeMonth">‹</view>
+                        <text class="month-title">{{monthTitle}}</text>
+                        <view class="nav-arrow" data-step="1" bindtap="changeMonth">›</view>
+                        <text class="month-today" bindtap="goToday">今天</text>
+                    </view>
+                    <view class="month-heads">
+                        <text wx:for="{{monthHeads}}" wx:key="*this" class="month-head">{{item}}</text>
+                    </view>
+                    <view class="month-grid">
+                        <view wx:for="{{monthCells}}" wx:key="key"
+                              class="month-cell {{item.inMonth ? '' : 'month-cell-out'}} {{item.isToday ? 'month-cell-today' : ''}}"
+                              data-key="{{item.key}}" bindtap="onDayTap">
+                            <text class="month-day">{{item.dayNumber}}</text>
+                            <text class="month-parity">{{item.parityText}}</text>
+                            <view class="month-dots">
+                                <view wx:for="{{item.dots}}" wx:for-item="dot" wx:key="id" class="month-dot" style="background:{{dot.color}}"></view>
+                            </view>
+                            <text wx:if="{{item.count > 0}}" class="month-count">{{item.count}} 节</text>
+                        </view>
+                    </view>
+                    <text class="month-tip">单 / 双按开学第一周推算 · 点日期查看当天课程</text>
+                </view>
+            </block>
+        </block>
+
+        <view class="fab" bindtap="onAdd"><text class="fab-text">＋</text></view>
+    </block>
+
+    <!-- 当天课程抽屉 -->
+    <view wx:if="{{showDaySheet}}" class="sheet-mask" bindtap="closeDaySheet"></view>
+    <view wx:if="{{showDaySheet}}" class="day-sheet" catchtap="noop">
+        <view class="sheet-handle"></view>
+        <view class="row-between">
+            <text class="section-title">{{selectedDayLabel}}</text>
+            <text class="sheet-close" bindtap="closeDaySheet">关闭</text>
+        </view>
+        <scroll-view scroll-y class="sheet-list">
+            <view wx:for="{{selectedDayCourses}}" wx:key="id" class="sheet-item" style="border-left:8rpx solid {{item.solid}}">
+                <view class="row-between">
+                    <text class="sheet-title">{{item.title}}</text>
+                    <text class="sheet-time">{{item.timeText}}</text>
+                </view>
+                <text class="sheet-meta">{{item.locationText}}</text>
+                <text wx:if="{{item.teacherText}}" class="sheet-meta">{{item.teacherText}}</text>
+                <text wx:if="{{item.weekText !== '每周'}}" class="tag sheet-tag">{{item.weekText}}</text>
+            </view>
+            <view wx:if="{{selectedDayCourses.length === 0}}" class="empty-box">
+                <text class="empty-title">这天没有课</text>
+                <text class="empty-desc">好好休息一下</text>
+            </view>
+        </scroll-view>
+    </view>
+
+    <!-- 身份切换 -->
+    <view wx:if="{{showRolePicker}}" class="sheet-mask" bindtap="closeRolePicker"></view>
+    <view wx:if="{{showRolePicker}}" class="role-sheet" catchtap="noop">
+        <view class="sheet-handle"></view>
+        <text class="section-title">切换使用身份</text>
+        <text class="section-sub">身份会保存在云端，换手机登录后保持不变</text>
+        <view wx:for="{{roleOptions}}" wx:key="key" class="role-option {{item.selected ? 'role-option-selected' : ''}}"
+              data-key="{{item.key}}" bindtap="pickRole">
+            <text class="role-option-icon">{{item.icon}}</text>
+            <view class="grow">
+                <text class="role-option-name">{{item.name}}</text>
+                <text class="role-option-desc">{{item.desc}}</text>
+            </view>
+            <text wx:if="{{item.selected}}" class="role-option-check">✓</text>
+        </view>
+    </view>
+</view>

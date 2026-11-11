@@ -1,0 +1,124 @@
+<view class="page page-safe edit-page">
+    <block wx:if="{{authState === 'checking' || loading}}">
+        <view class="loading-box">
+            <view class="spinner"></view>
+            <text class="empty-desc">正在加载…</text>
+        </view>
+    </block>
+
+    <block wx:elif="{{authState === 'signed-out'}}">
+        <login-panel title="登录后编辑课程" bind:signedin="onRetry" bind:demo="goBack" />
+    </block>
+
+    <block wx:else>
+        <view wx:if="{{errorText}}" class="error-card">
+            <text class="error-desc">{{errorText}}</text>
+            <button wx:if="{{errorText === '这条课程不存在或已被删除'}}" class="plain-btn retry-btn" bindtap="goBack">返回</button>
+        </view>
+
+        <view class="card">
+            <text class="section-title">课程信息</text>
+            <view class="field">
+                <text class="field-label">课程名称 *</text>
+                <input class="input" placeholder="例如：高等数学" placeholder-class="input-placeholder"
+                       value="{{form.title}}" data-field="title" bindinput="onFieldInput" maxlength="60" />
+            </view>
+            <view class="field">
+                <text class="field-label">教师</text>
+                <input class="input" placeholder="选填" placeholder-class="input-placeholder"
+                       value="{{form.teacher}}" data-field="teacher" bindinput="onFieldInput" maxlength="60" />
+            </view>
+            <view class="field">
+                <text class="field-label">上课地点</text>
+                <input class="input" placeholder="例如：教三 201" placeholder-class="input-placeholder"
+                       value="{{form.location}}" data-field="location" bindinput="onFieldInput" maxlength="80" />
+            </view>
+            <view class="field">
+                <text class="field-label">备注</text>
+                <input class="input" placeholder="选填，例如：带练习册" placeholder-class="input-placeholder"
+                       value="{{form.note}}" data-field="note" bindinput="onFieldInput" maxlength="200" />
+            </view>
+        </view>
+
+        <view class="card">
+            <text class="section-title">时间与周次</text>
+            <text class="section-sub">上课时间可以直接手动填写，也可以按作息节次一键填充</text>
+
+            <view class="field">
+                <text class="field-label">星期</text>
+                <picker mode="selector" range="{{dayNames}}" value="{{dayIndex}}" bindchange="onDayChange">
+                    <view class="picker-value">{{dayNames[dayIndex]}} <text class="picker-arrow">›</text></view>
+                </picker>
+            </view>
+
+            <view class="field">
+                <text class="field-label">按作息节次快速填充</text>
+                <picker mode="selector" range="{{periodNames}}" value="{{periodIndex}}" bindchange="onPeriodChange">
+                    <view class="picker-value">{{periodNames[periodIndex]}} <text class="picker-arrow">›</text></view>
+                </picker>
+            </view>
+
+            <view class="time-row">
+                <view class="field grow">
+                    <text class="field-label">开始时间</text>
+                    <input class="input" type="text" placeholder="08:00" placeholder-class="input-placeholder"
+                           value="{{form.start_time}}" data-field="start_time" bindinput="onFieldInput" maxlength="5" />
+                </view>
+                <view class="time-dash">–</view>
+                <view class="field grow">
+                    <text class="field-label">结束时间</text>
+                    <input class="input" type="text" placeholder="08:45" placeholder-class="input-placeholder"
+                           value="{{form.end_time}}" data-field="end_time" bindinput="onFieldInput" maxlength="5" />
+                </view>
+            </view>
+
+            <view class="field">
+                <text class="field-label">重复周次</text>
+                <view class="option-row">
+                    <view wx:for="{{weekTypes}}" wx:key="key"
+                          class="option {{item.selected ? 'option-active' : ''}}"
+                          data-key="{{item.key}}" bindtap="onWeekType">{{item.name}}</view>
+                </view>
+            </view>
+        </view>
+
+        <view class="card">
+            <text class="section-title">课程颜色</text>
+            <view class="color-row">
+                <view wx:for="{{colors}}" wx:key="key" class="color-item {{item.selected ? 'color-item-active' : ''}}"
+                      style="background:{{item.bg}};border-color:{{item.selected ? item.solid : item.bg}}"
+                      data-key="{{item.key}}" bindtap="onColor">
+                    <view class="color-dot" style="background:{{item.solid}}"></view>
+                    <text class="color-name" style="color:{{item.fg}}">{{item.name}}</text>
+                    <text wx:if="{{item.selected}}" class="color-check" style="color:{{item.fg}}">✓</text>
+                </view>
+            </view>
+        </view>
+
+        <view class="card">
+            <text class="section-title">上课提醒</text>
+            <text class="section-sub">可开启微信订阅消息授权，或同步到手机日历获得系统提醒</text>
+            <view class="row-between switch-row">
+                <text>为这节课开启提醒</text>
+                <switch checked="{{form.remind}}" color="#2f6bed" bindchange="onRemindChange" />
+            </view>
+            <view wx:if="{{form.remind}}" class="field">
+                <text class="field-label">提醒提前量</text>
+                <picker mode="selector" range="{{leadLabels}}" value="{{leadIndex}}" bindchange="onLeadChange">
+                    <view class="picker-value">{{leadLabels[leadIndex]}} <text class="picker-arrow">›</text></view>
+                </picker>
+            </view>
+        </view>
+
+        <view wx:if="{{isEdit}}" class="danger-zone">
+            <button class="danger-btn" bindtap="remove">删除这节课</button>
+            <text class="danger-note">删除会同步移除云端记录，无法恢复</text>
+        </view>
+
+        <view class="bottom-bar-spacer"></view>
+        <view class="bottom-bar row">
+            <button class="plain-btn bar-cancel" bindtap="goBack">取消</button>
+            <button class="primary-btn grow" loading="{{saving}}" disabled="{{saving}}" bindtap="save">保存到云端</button>
+        </view>
+    </block>
+</view>

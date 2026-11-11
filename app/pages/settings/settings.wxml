@@ -1,0 +1,100 @@
+<view class="page page-safe settings-page">
+    <block wx:if="{{authState === 'checking' || loading}}">
+        <view class="loading-box">
+            <view class="spinner"></view>
+            <text class="empty-desc">正在加载设置…</text>
+        </view>
+    </block>
+
+    <block wx:elif="{{authState === 'signed-out'}}">
+        <login-panel title="登录后修改设置" bind:signedin="onRetry" bind:demo="goBack" />
+    </block>
+
+    <block wx:else>
+        <view wx:if="{{errorText}}" class="error-card">
+            <text class="error-desc">{{errorText}}</text>
+        </view>
+
+        <view class="card">
+            <text class="section-title">学期与单双周</text>
+            <text class="section-sub">以「第一周周一」为基准推算周次：第 1 周为单周，第 2 周为双周，依此类推</text>
+            <view class="field setting-field">
+                <text class="field-label">开学第一周的周一</text>
+                <picker mode="date" value="{{termStart}}" bindchange="onTermStartChange">
+                    <view class="picker-value">{{termStart}} <text class="picker-arrow">›</text></view>
+                </picker>
+            </view>
+        </view>
+
+        <view class="card">
+            <view class="row-between">
+                <text class="section-title">作息节次</text>
+                <text class="link-text" bindtap="resetPeriods">恢复默认</text>
+            </view>
+            <text class="section-sub">每节课的上课时间都可以手动修改，课表左侧时间轴会跟着变化</text>
+
+            <view class="period-head">
+                <text class="ph-label">节次</text>
+                <text class="ph-time">开始</text>
+                <text class="ph-time">结束</text>
+                <text class="ph-del"></text>
+            </view>
+            <view wx:for="{{periods}}" wx:key="sort_no" class="period-row">
+                <input class="period-input ph-label" value="{{item.label}}" placeholder="第 N 节"
+                       placeholder-class="input-placeholder" data-index="{{index}}" data-field="label" bindinput="onPeriodInput" />
+                <input class="period-input ph-time" value="{{item.start_time}}" placeholder="08:00"
+                       placeholder-class="input-placeholder" data-index="{{index}}" data-field="start_time" bindinput="onPeriodInput" maxlength="5" />
+                <input class="period-input ph-time" value="{{item.end_time}}" placeholder="08:45"
+                       placeholder-class="input-placeholder" data-index="{{index}}" data-field="end_time" bindinput="onPeriodInput" maxlength="5" />
+                <view class="ph-del" data-index="{{index}}" bindtap="removePeriod"><text class="del-icon">×</text></view>
+            </view>
+
+            <view class="period-actions">
+                <button class="plain-btn grow" bindtap="addPeriod">＋ 新增节次</button>
+                <button class="primary-btn grow" loading="{{saving}}" disabled="{{saving}}" bindtap="savePeriods">保存作息</button>
+            </view>
+        </view>
+
+        <view class="card">
+            <text class="section-title">上课提醒</text>
+            <text class="section-sub">提醒设置保存在云端，换手机登录后依然生效</text>
+
+            <view class="row-between switch-row">
+                <text>启用上课提醒</text>
+                <switch checked="{{remindEnabled}}" color="#2f6bed" bindchange="onRemindChange" />
+            </view>
+
+            <view class="field setting-field">
+                <text class="field-label">默认提前量</text>
+                <picker mode="selector" range="{{leadLabels}}" value="{{leadIndex}}" bindchange="onLeadChange">
+                    <view class="picker-value">{{leadLabels[leadIndex]}} <text class="picker-arrow">›</text></view>
+                </picker>
+            </view>
+
+            <view class="remind-row">
+                <view class="grow">
+                    <text class="remind-title">微信订阅消息</text>
+                    <text class="remind-status">{{subscribeStatus}}</text>
+                </view>
+                <button class="ghost-btn remind-btn" bindtap="requestSubscribe">开启授权</button>
+            </view>
+            <view class="remind-row">
+                <view class="grow">
+                    <text class="remind-title">手机日历提醒</text>
+                    <text class="remind-status">按单双周写入系统日历，立即生效（{{courseCount}} 节课）</text>
+                </view>
+                <button class="ghost-btn remind-btn" loading="{{calendarBusy}}" disabled="{{calendarBusy}}" bindtap="syncCalendar">同步日历</button>
+            </view>
+
+            <view class="notice-box">
+                <text class="notice-title">关于微信通知</text>
+                <text class="notice-text">小程序端已经完成订阅消息授权与提醒时间设置。正式的「上课前推送」需要在微信公众平台申请订阅消息模板，并在服务端按上课时间定时下发；模板 ID 配置在 utils/config.js。未配置模板时应用会给出提示，不会静默失败。</text>
+            </view>
+        </view>
+
+        <view class="card">
+            <text class="section-title">数据说明</text>
+            <text class="section-sub">课程、作息、身份与提醒设置都存放在云端，并按微信登录身份隔离。换手机或重装微信后，用同一个微信登录即可恢复完整课表。</text>
+        </view>
+    </block>
+</view>

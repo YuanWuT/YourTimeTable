@@ -1,0 +1,9 @@
+{
+  "name": "your-timetable",
+  "version": "1.0.0",
+  "private": true,
+  "description": "你的课程表 - 微信小程序",
+  "dependencies": {
+    "@tencent-ai/workbuddy-cloud-sdk": "dev"
+  }
+}
