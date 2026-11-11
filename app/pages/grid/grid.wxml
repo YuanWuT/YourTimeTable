@@ -1,0 +1,61 @@
+<view class="page page-safe grid-page">
+    <block wx:if="{{authState === 'checking' || loading}}">
+        <view class="loading-box">
+            <view class="spinner"></view>
+            <text class="empty-desc">正在加载课表网格…</text>
+        </view>
+    </block>
+
+    <block wx:elif="{{authState === 'signed-out'}}">
+        <login-panel title="登录后录入课程" bind:signedin="onRetry" bind:demo="onDemo" />
+    </block>
+
+    <block wx:else>
+        <view wx:if="{{errorText}}" class="error-card">
+            <text class="error-desc">{{errorText}}</text>
+            <button class="plain-btn retry-btn" bindtap="onRetry">重新加载</button>
+        </view>
+
+        <view class="card">
+            <text class="section-title">点格子录入 · {{roleName}}课表</text>
+            <text class="section-sub">点空格子添加课程，点已有课程可编辑或删除；每个身份有自己独立的课表</text>
+            <view class="intro-actions">
+                <button class="ghost-btn" bindtap="goRecycle">已删除的课程 {{deletedCount}}</button>
+                <button class="ghost-btn" bindtap="goSettings">作息节次</button>
+            </view>
+        </view>
+
+        <view class="grid-card">
+            <view class="time-rail">
+                <view class="rail-head"><text>节次</text></view>
+                <view wx:for="{{timeRail}}" wx:key="sort_no" class="rail-row">
+                    <text class="rail-label">{{item.label}}</text>
+                    <text class="rail-time">{{item.start_time}}</text>
+                    <text class="rail-time">{{item.end_time}}</text>
+                </view>
+            </view>
+            <scroll-view class="days-scroll" scroll-x="true">
+                <view class="days-inner">
+                    <view wx:for="{{columns}}" wx:key="key" class="day-col">
+                        <view class="day-head"><text class="day-name">{{item.dayName}}</text></view>
+                        <view wx:for="{{item.cells}}" wx:for-item="cell" wx:key="key" class="grid-cell"
+                              data-day="{{cell.day}}" data-period="{{cell.periodNo}}" bindtap="onCellTap">
+                            <block wx:if="{{cell.courses.length > 0}}">
+                                <view wx:for="{{cell.courses}}" wx:for-item="course" wx:key="id"
+                                      class="course-chip"
+                                      style="background:{{course.bg}};color:{{course.fg}};border-left:6rpx solid {{course.solid}}">
+                                    <text class="chip-title">{{course.title}}</text>
+                                    <text class="chip-time">{{course.timeText}}</text>
+                                </view>
+                            </block>
+                            <view wx:else class="cell-add"><text>＋</text></view>
+                        </view>
+                    </view>
+                </view>
+            </scroll-view>
+        </view>
+
+        <view class="grid-tip">共 {{courseCount}} 节课 · 左右滑动查看周一到周日 · 点空格子即可添加</view>
+        <view class="fab" bindtap="onAddFree"><text class="fab-text">＋</text></view>
+    </block>
+</view>

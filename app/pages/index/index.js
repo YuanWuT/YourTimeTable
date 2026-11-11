@@ -93,19 +93,25 @@ Page({
 
     async loadAll() {
         this.setData({ loading: true, errorText: '' });
+        // 先同步身份，再按该身份拉取课程：不同身份各有一份独立课表
+        const settingsResult = await store.syncSettings();
+        if (settingsResult.error) {
+            this.setData({ loading: false, errorText: settingsResult.error.message || '数据加载失败，请检查网络' });
+            return;
+        }
+        const role = settingsResult.data.role;
         const results = await Promise.all([
-            store.ensureSettings(),
             store.listPeriods(),
-            store.listCourses(),
+            store.listCourses(role),
         ]);
         const problem = results.find(item => item && item.error);
         if (problem) {
             this.setData({ loading: false, errorText: problem.error.message || '数据加载失败，请检查网络' });
             return;
         }
-        this.settings = results[0].data;
-        this.periods = results[1].data || [];
-        this.courses = results[2].data || [];
+        this.settings = settingsResult.data;
+        this.periods = results[0].data || [];
+        this.courses = results[1].data || [];
         getApp().globalData.settings = this.settings;
         getApp().globalData.periods = this.periods;
         getApp().globalData.courses = this.courses;
@@ -291,7 +297,8 @@ Page({
         this.settings = Object.assign({}, this.settings, result.data);
         getApp().globalData.settings = this.settings;
         wx.showToast({ title: '已切换身份', icon: 'success' });
-        this.recompute();
+        // 切换身份后必须重新拉取云端课程，否则课表不会跟着变
+        await this.loadAll();
     },
 
     onCourseTap(event) {
@@ -301,6 +308,16 @@ Page({
         }
         const id = event.currentTarget.dataset.id;
         wx.navigateTo({ url: '/pages/course-edit/course-edit?id=' + id });
+    },
+
+    onCellTap(event) {
+        if (this.data.demoMode || this.data.authState !== 'signed-in') {
+            wx.showToast({ title: '登录后即可添加课程', icon: 'none' });
+            return;
+        }
+        const day = Number(event.currentTarget.dataset.day);
+        const period = Number(event.currentTarget.dataset.period);
+        wx.navigateTo({ url: '/pages/course-edit/course-edit?day=' + day + '&period=' + period });
     },
 
     onAdd() {

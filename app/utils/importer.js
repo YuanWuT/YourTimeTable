@@ -2,19 +2,34 @@
 // 解析结果统一归一化成课程对象，交给导入页确认后再批量写入云端。
 const { cloud } = require('./cloud');
 const { COURSE_COLORS } = require('./config');
-const { DEFAULT_PERIODS, timeToMinutes } = require('./schedule');
+const { DEFAULT_PERIODS, timeToMinutes, normalizePeriods } = require('./schedule');
 
 const SYSTEM_PROMPT = [
-    '你是中文课程表信息抽取助手。把用户提供的课程表内容转换成 JSON 数组，不要输出任何解释、Markdown 代码块或多余文字。',
-    '数组每项字段固定为：title(课程名,必填)、teacher(教师)、location(地点)、day_of_week(整数1-7，1=周一,7=周日)、',
-    'start_time(HH:MM 24小时制)、end_time(HH:MM)、week_type(仅允许 all/odd/even，分别代表每周/仅单周/仅双周)、note(备注)。',
-    '识别不到信息的字段填空字符串或默认值：day_of_week 默认 1，start_time 默认 08:00，end_time 默认 08:45，week_type 默认 all。',
-    '照片里若出现"单周/双周"标记，必须写入对应课程的 week_type；同一格里的教室、老师分别放进 location 和 teacher。',
-    '课程名不要连带节次编号或时间；一节课只输出一条记录；不要臆造照片中不存在的课程。',
+    '你是中文课程表信息抽取助手。把用户提供的课程表转换成 JSON，只输出 JSON，不要解释、不要 Markdown 代码块。',
+    '输出格式固定为对象 {"courses":[ ... ]}。courses 每项字段：title(课程名,必填)、teacher(教师)、location(地点)、',
+    'day_of_week(整数1-7，1=周一,7=周日)、period_no(整数，第几节课，从 1 开始)、start_time(HH:MM)、end_time(HH:MM)、',
+    'week_type(只允许 all/odd/even，代表每周/仅单周/仅双周)、note(备注)。',
+    '规则：一节课只输出一条记录；不要臆造不存在的课程；课程名不要带节次编号或时间；',
+    '「单周/双周」标记写入 week_type；同一格里的地点写进 location。',
+    '识别不到信息的字段填空字符串或默认值：day_of_week 默认 1，week_type 默认 all。',
 ].join('');
 
-const PHOTO_HINT = '请识别这张课程表照片中的全部课程，按上面的字段要求输出 JSON 数组。';
-const TEXT_HINT = '请从下面的课程表文字中识别全部课程：\n';
+// 把用户当前的作息节次注入图片提示词：照片上往往只有「第N节」而没有具体时间。
+function photoHint(periods) {
+    const lines = (periods || []).slice(0, 16).map(p =>
+        '第' + p.sort_no + '节 ' + p.start_time + '-' + p.end_time
+    ).join('；');
+    return [
+        '请逐行逐列识别这张课程表照片，输出 {"courses":[...]}，每节课一条记录。',
+        '步骤 1：读表头，从左到右确定每一列是星期几（星期一=1 … 星期日=7），按表头实际文字，不要漏列、不要错位。',
+        '步骤 2：读左侧「第N节」行，period_no 填 N；「晨读」「大课间」「午休」「上午/下午」等合并行不是课程，跳过。',
+        '步骤 3：逐个单元格输出，第一行是课程名，圆括号（含全角）里的姓名是 teacher，不要写进课程名。',
+        '当前作息节次时间表：' + (lines || '未提供'),
+        '照片上若没有写具体上课时间，start_time / end_time 留空字符串，只输出 period_no，程序会按上表补全；不要自己编时间。',
+        '表格里有多少节课就输出多少条，务必覆盖全部星期列与全部节次行；不要把所有课程都放进第 1 节。',
+    ].join('\n');
+}
+const TEXT_HINT = '请从下面的课程表文字中识别全部课程，输出 {"courses":[...]}：\n';
 
 function trimText(value, limit) {
     return String(value === undefined || value === null ? '' : value).trim().slice(0, limit || 120);
@@ -80,23 +95,45 @@ function colorFor(title) {
     return COURSE_COLORS[hash % COURSE_COLORS.length].key;
 }
 
-function normalizeCourse(raw) {
+const NON_COURSE_TITLE = /^(晨读|早读|大课间|课间|午休|午餐|上午|下午|晚上|晚自习|时间|节次|星期|备注|课程表?)$/;
+
+function periodAt(periods, no) {
+    return (periods || []).find(p => Number(p.sort_no) === Number(no)) || null;
+}
+
+function normalizeCourse(raw, periods) {
     const item = raw || {};
     let title = trimText(item.title || item.name || item.course || '', 60);
-    //  Sometimes the model returns "课程名（单周）"; strip the parity suffix into week_type.
-    const parityInTitle = title.match(/[（(]?\s*(单周|双周)\s*[)）]?/);
+    // 「大学英语（单周）」：先把周次标记拆出来。
+    const parityInTitle = title.match(/(单周|双周)/);
     const weekType = parityInTitle ? parseWeekType(parityInTitle[1]) : parseWeekType(item.week_type || item.weeks || item.week);
-    if (parityInTitle) title = title.replace(parityInTitle[0], '').trim();
+    if (parityInTitle) title = title.replace(/[（(]?\s*(单周|双周)\s*[)）]?/g, '').trim();
+    // 「数学（牛利）」：括号里的姓名是教师，不能混进课程名。
+    let embeddedTeacher = '';
+    const bracket = title.match(/^([\s\S]+?)[（(]([^()（）]{1,20})[)）]\s*$/);
+    if (bracket) {
+        title = bracket[1].trim();
+        embeddedTeacher = bracket[2].trim();
+    }
     title = title.replace(/^第?\s*\d+\s*节[:：\s]*/, '').trim();
-    if (!title) return null;
-    const start = normalizeTime(item.start_time || item.start || item.begin) || '08:00';
-    const end = normalizeTime(item.end_time || item.end || item.finish) || plusMinutes(start, 45);
+    if (!title || NON_COURSE_TITLE.test(title)) return null;
+
+    const rawPeriod = item.period_no !== undefined ? item.period_no : (item.period || item.jie || item.section);
+    const periodNo = Math.max(0, Math.min(30, Math.round(Number(rawPeriod) || 0)));
+    const slot = periodNo > 0 ? periodAt(periods, periodNo) : null;
+    let start = normalizeTime(item.start_time || item.start || item.begin)
+        || (slot ? normalizeTime(slot.start_time) : '')
+        || '08:00';
+    let end = normalizeTime(item.end_time || item.end || item.finish)
+        || (slot ? normalizeTime(slot.end_time) : '')
+        || plusMinutes(start, 45);
+    if (timeToMinutes(end) <= timeToMinutes(start)) end = plusMinutes(start, 45);
     return {
         title: title,
-        teacher: trimText(item.teacher || item.teacherName || '', 60),
+        teacher: trimText(item.teacher || item.teacherName || embeddedTeacher || '', 60),
         location: trimText(item.location || item.room || item.place || '', 80),
         day_of_week: parseWeekday(item.day_of_week !== undefined ? item.day_of_week : (item.day || item.weekday)),
-        period_no: 0,
+        period_no: periodNo,
         start_time: start,
         end_time: end,
         week_type: weekType,
@@ -107,34 +144,107 @@ function normalizeCourse(raw) {
     };
 }
 
-function extractJson(text) {
-    let source = String(text || '').trim();
-    source = source.replace(/^```(?:json)?/i, '').replace(/```\s*$/, '').trim();
-    const arrayStart = source.indexOf('[');
-    const arrayEnd = source.lastIndexOf(']');
-    if (arrayStart >= 0 && arrayEnd > arrayStart) {
-        source = source.slice(arrayStart, arrayEnd + 1);
-    } else {
-        const objectStart = source.indexOf('{');
-        const objectEnd = source.lastIndexOf('}');
-        if (objectStart >= 0 && objectEnd > objectStart) {
-            source = '[' + source.slice(objectStart, objectEnd + 1) + ']';
+// 模型没给节次时，按每天的输出顺序（通常自上而下）补齐 1..N 节，并套用作息时间。
+function repairPeriods(courses, periods) {
+    if (!periods || periods.length === 0) return courses;
+    const maxPeriod = periods.length;
+    const byDay = {};
+    courses.forEach((course) => {
+        const key = String(course.day_of_week);
+        if (!byDay[key]) byDay[key] = [];
+        byDay[key].push(course);
+    });
+    const result = [];
+    Object.keys(byDay).forEach((key) => {
+        const list = byDay[key];
+        if (!list.some(c => !c.period_no || c.period_no < 1)) {
+            list.forEach(c => result.push(c));
+            return;
         }
-    }
-    const parsed = JSON.parse(source);
-    const list = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.courses) ? parsed.courses : [parsed]);
-    return list.map(normalizeCourse).filter(Boolean);
+        let cursor = 1;
+        list.forEach((course) => {
+            if (course.period_no > 0) {
+                result.push(course);
+                return;
+            }
+            let no = cursor;
+            while (no <= maxPeriod && list.some(x => Number(x.period_no) === no)) no += 1;
+            cursor = no + 1;
+            const slot = periodAt(periods, no);
+            result.push(Object.assign({}, course, {
+                period_no: no,
+                start_time: slot ? slot.start_time : course.start_time,
+                end_time: slot ? slot.end_time : course.end_time,
+            }));
+        });
+    });
+    return result;
 }
 
-async function chooseModel(needImage) {
-    const models = await cloud.llm.models.list();
-    const usable = (models || []).filter(m => m && m.enabled !== false && m.disabled !== true && m.id && m.id.indexOf('image') < 0);
-    if (usable.length === 0) return null;
-    if (needImage) {
-        return usable.find(m => m.supportsImages === true && m.disabledMultimodal !== true) || null;
+// 兜底：模型偶尔把整张表都标成第 1 节；同一天同一节次出现多门每周课时顺延到空节次。
+function spreadSameSlot(courses, periods) {
+    if (!periods || periods.length === 0) return courses;
+    const used = {};
+    const maxPeriod = periods.length;
+    return courses.map((course) => {
+        const no = Number(course.period_no) || 1;
+        const key = course.day_of_week + '-' + no;
+        if (!used[key]) {
+            used[key] = true;
+            return course;
+        }
+        if (course.week_type !== 'all') return course;
+        let next = no + 1;
+        while (next <= maxPeriod && used[course.day_of_week + '-' + next]) next += 1;
+        if (next > maxPeriod) return course;
+        used[course.day_of_week + '-' + next] = true;
+        const slot = periodAt(periods, next);
+        return Object.assign({}, course, {
+            period_no: next,
+            start_time: slot ? slot.start_time : course.start_time,
+            end_time: slot ? slot.end_time : course.end_time,
+        });
+    });
+}
+
+function extractJson(text, periods) {
+    let source = String(text || '').trim();
+    source = source.replace(/^```(?:json)?/i, '').replace(/```\s*$/, '').trim();
+    const objectStart = source.indexOf('{');
+    const objectEnd = source.lastIndexOf('}');
+    const arrayStart = source.indexOf('[');
+    if (objectStart >= 0 && objectEnd > objectStart && (arrayStart < 0 || objectStart < arrayStart)) {
+        source = source.slice(objectStart, objectEnd + 1);
+    } else {
+        const arrayEnd = source.lastIndexOf(']');
+        if (arrayStart >= 0 && arrayEnd > arrayStart) source = source.slice(arrayStart, arrayEnd + 1);
     }
-    // 文本抽取优先便宜、快速且稳定的模型
-    return usable.find(m => /flash|fast|auto/i.test(m.id)) || usable[0];
+    const parsed = JSON.parse(source);
+    const list = Array.isArray(parsed) ? parsed
+        : (parsed && Array.isArray(parsed.courses) ? parsed.courses : [parsed]);
+    const courses = list.map(item => normalizeCourse(item, periods)).filter(Boolean);
+    return spreadSameSlot(repairPeriods(courses, periods), periods);
+}
+
+// 图片识别优先原生多模态 / 视觉理解模型；auto 作为稳定兜底，避免选到不支持图片的模型。
+const VISION_MODEL_PRIORITY = ['glm-5.3-flash', 'hy4free', 'deepseek-v4.1-flash', 'glm-4.6v', 'auto'];
+const TEXT_MODEL_PRIORITY = ['fast-model', 'auto'];
+
+async function chooseModels(needImage) {
+    const models = await cloud.llm.models.list();
+    const usable = (models || []).filter(m => m && m.enabled !== false && m.disabled !== true && m.id
+        && (!needImage || (m.supportsImages === true && m.disabledMultimodal !== true)));
+    if (usable.length === 0) return [];
+    const preference = needImage ? VISION_MODEL_PRIORITY : TEXT_MODEL_PRIORITY;
+    const picked = [];
+    preference.forEach((id) => {
+        const found = usable.find(m => m.id === id);
+        if (found && picked.indexOf(found.id) < 0) picked.push(found.id);
+    });
+    usable.forEach((m) => {
+        if (picked.indexOf(m.id) < 0 && picked.length < 3) picked.push(m.id);
+    });
+    return picked.slice(0, 2);
 }
 
 function friendlyLLMError(error) {
@@ -147,47 +257,63 @@ function friendlyLLMError(error) {
 }
 
 // 统一的模型调用：system 消息必须位于 messages[0]，且只能使用流式接口
+async function callLLM(modelId, opts, periods) {
+    let userContent;
+    if (opts.imageBase64) {
+        const mime = /png/i.test(opts.imageMime || '') ? 'image/png' : 'image/jpeg';
+        userContent = [
+            { type: 'text', text: photoHint(periods) },
+            { type: 'image_url', image_url: { url: 'data:' + mime + ';base64,' + opts.imageBase64 } },
+        ];
+    } else {
+        userContent = TEXT_HINT + String(opts.text || '').slice(0, 6000);
+    }
+    const messages = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userContent },
+    ];
+    let answer = '';
+    const stream = cloud.llm.chat.completions.create({
+        model: modelId,
+        messages: messages,
+        stream: true,
+        temperature: 0.2,
+    });
+    for await (const chunk of stream) {
+        const choice = chunk && chunk.choices && chunk.choices[0];
+        const delta = choice && choice.delta;
+        if (delta && delta.content) answer += delta.content;
+    }
+    return answer;
+}
+
 async function llmExtract(options) {
     const opts = options || {};
+    const periods = normalizePeriods(opts.periods && opts.periods.length ? opts.periods : []);
+    let modelIds = [];
     try {
-        const model = await chooseModel(Boolean(opts.imageBase64));
-        if (!model) {
-            return { data: [], error: { code: 'NO_MODEL', message: '当前没有可用的识别模型，请改用手动录入或 Excel 导入' } };
-        }
-        let userContent;
-        if (opts.imageBase64) {
-            const mime = /png/i.test(opts.imageMime || '') ? 'image/png' : 'image/jpeg';
-            userContent = [
-                { type: 'text', text: PHOTO_HINT },
-                { type: 'image_url', image_url: { url: 'data:' + mime + ';base64,' + opts.imageBase64 } },
-            ];
-        } else {
-            userContent = TEXT_HINT + String(opts.text || '').slice(0, 6000);
-        }
-        const messages = [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: userContent },
-        ];
-        let answer = '';
-        const stream = cloud.llm.chat.completions.create({
-            model: model.id,
-            messages: messages,
-            stream: true,
-            temperature: 0.2,
-        });
-        for await (const chunk of stream) {
-            const choice = chunk && chunk.choices && chunk.choices[0];
-            const delta = choice && choice.delta;
-            if (delta && delta.content) answer += delta.content;
-        }
-        const courses = extractJson(answer);
-        if (courses.length === 0) {
-            return { data: [], error: { code: 'EMPTY_RESULT', message: '没有识别到课程，请换一张更清晰的照片或手动录入' } };
-        }
-        return { data: courses, error: null };
+        modelIds = await chooseModels(Boolean(opts.imageBase64));
     } catch (error) {
         return { data: [], error: { code: 'LLM_FAILED', message: friendlyLLMError(error) } };
     }
+    if (modelIds.length === 0) {
+        return { data: [], error: { code: 'NO_MODEL', message: '当前没有可用的识别模型，请改用手动录入或 Excel 导入' } };
+    }
+    let lastError = { code: 'EMPTY_RESULT', message: '没有识别到课程，请换一张更清晰的照片或手动录入' };
+    for (let i = 0; i < modelIds.length; i += 1) {
+        try {
+            const answer = await callLLM(modelIds[i], opts, periods);
+            const courses = extractJson(answer, periods);
+            if (courses.length > 0) return { data: courses, error: null };
+            lastError = { code: 'EMPTY_RESULT', message: '没有识别到课程，请换一张更清晰的照片或手动录入' };
+        } catch (error) {
+            lastError = { code: 'LLM_FAILED', message: friendlyLLMError(error) };
+            const code = error && error.error && typeof error.error.code === 'string' ? error.error.code : '';
+            // 授权与额度问题换模型也没用，不要无谓重试
+            if (code.indexOf('auth_') === 0 || code.indexOf('quota_') === 0) break;
+        }
+    }
+    return { data: [], error: lastError };
 }
 
 /* ------------------------- CSV / Excel 本地解析 ------------------------- */
@@ -382,9 +508,15 @@ function splitCellContent(value) {
         .split(/[\n\r]+|@|\||；|;/)
         .map(part => part.trim())
         .filter(Boolean);
-    const title = lines[0] || '';
+    let title = lines[0] || '';
     let teacher = '';
     let location = '';
+    // 「数学（牛利）」这类单格写法：括号里是教师名
+    const bracket = title.match(/^([\s\S]+?)[（(]([^()（）]{1,20})[)）]\s*$/);
+    if (bracket) {
+        title = bracket[1].trim();
+        teacher = bracket[2].trim();
+    }
     lines.slice(1).forEach((line) => {
         if (/楼|室|场|校区|教室|机房|实验室|操场|\d{3,}/.test(line) && !location) location = line;
         else if (!teacher) teacher = line;
@@ -392,9 +524,10 @@ function splitCellContent(value) {
     return { title: title, teacher: teacher, location: location };
 }
 
-function rowsToCourses(rows) {
+function rowsToCourses(rows, periods) {
     const source = (rows || []).filter(row => row && row.some(cell => String(cell).trim() !== ''));
     if (source.length === 0) return [];
+    const slots = normalizePeriods(periods && periods.length ? periods : []);
     const header = source[0].map(cell => String(cell || '').trim());
     const dayColumns = [];
     header.forEach((cell, index) => {
@@ -402,12 +535,25 @@ function rowsToCourses(rows) {
         if (day) dayColumns.push({ day: day, index: index });
     });
 
-    // 矩阵式课程表：表头是周一~周日，每行是一个时间段
+    // 矩阵式课程表：表头是周一~周日，每行是一个节次
     if (dayColumns.length >= 2) {
         const result = [];
         for (let r = 1; r < source.length; r += 1) {
             const row = source[r];
-            const range = parseTimeRange(row[0], Math.min(r - 1, DEFAULT_PERIODS.length - 1));
+            const first = String(row[0] || '').trim();
+            const hasTime = /\d{1,2}\s*[:：]\s*\d{2}/.test(first);
+            const periodMatch = first.match(/第\s*(\d+)\s*节/);
+            // 「晨读 / 大课间 / 午休」这类合并行不是课程，跳过，避免节次错位
+            if (!hasTime && !periodMatch && /^(晨读|早读|大课间|午休|上午|下午|时间|节次)/.test(first)) continue;
+            const periodNo = periodMatch
+                ? Math.min(slots.length, Math.max(1, Number(periodMatch[1])))
+                : Math.min(slots.length, Math.max(1, r));
+            const slot = slots[periodNo - 1] || null;
+            const range = parseTimeRange(first, Math.min(periodNo - 1, DEFAULT_PERIODS.length - 1));
+            if (slot) {
+                range.start_time = slot.start_time;
+                range.end_time = slot.end_time;
+            }
             dayColumns.forEach((col) => {
                 const raw = String(row[col.index] || '').trim();
                 if (!raw || /^[-—/无]$/.test(raw)) return;
@@ -417,11 +563,12 @@ function rowsToCourses(rows) {
                     teacher: parts.teacher,
                     location: parts.location,
                     day_of_week: col.day,
+                    period_no: periodNo,
                     start_time: range.start_time,
                     end_time: range.end_time,
                     week_type: /单周/.test(raw) ? 'odd' : /双周/.test(raw) ? 'even' : 'all',
                     note: '',
-                });
+                }, slots);
                 if (course) result.push(course);
             });
         }
@@ -450,13 +597,13 @@ function rowsToCourses(rows) {
             end_time: get('end_time') || range.end_time,
             week_type: get('week_type'),
             note: get('note'),
-        });
+        }, slots);
         if (course && course.title !== String(header[fields.title] || '').trim()) result.push(course);
     }
     return result;
 }
 
-async function readTable(tempPath, fileName) {
+async function readTable(tempPath, fileName, periods) {
     const name = String(fileName || '').toLowerCase();
     if (/\.xls$/.test(name)) {
         return { data: [], error: { code: 'UNSUPPORTED', message: '旧版 .xls 暂不支持，请在 Excel 中另存为 .xlsx 或 .csv' } };
@@ -472,7 +619,7 @@ async function readTable(tempPath, fileName) {
             }
             rows = parseCsv(text);
         }
-        const courses = rowsToCourses(rows);
+        const courses = rowsToCourses(rows, periods);
         if (courses.length === 0) {
             return { data: [], error: { code: 'EMPTY_TABLE', message: '没读到课程，请检查表头是否包含「课程名称」或用周一~周日作为列标题' } };
         }
@@ -484,10 +631,14 @@ async function readTable(tempPath, fileName) {
 
 module.exports = {
     SYSTEM_PROMPT,
+    photoHint,
     llmExtract,
     readTable,
     parseCsv,
     rowsToCourses,
     normalizeCourse,
     normalizeTime,
+    extractJson,
+    repairPeriods,
+    spreadSameSlot,
 };

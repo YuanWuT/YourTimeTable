@@ -100,11 +100,12 @@
                                     <text class="day-name">{{item.dayName}}</text>
                                     <text class="day-date">{{item.dateLabel}}</text>
                                 </view>
-                                <view wx:for="{{item.cells}}" wx:for-item="cell" wx:key="key" class="grid-cell">
+                                <view wx:for="{{item.cells}}" wx:for-item="cell" wx:key="key" class="grid-cell"
+                                      data-day="{{cell.day}}" data-period="{{cell.periodNo}}" bindtap="onCellTap">
                                     <view wx:for="{{cell.courses}}" wx:for-item="course" wx:key="id"
                                           class="course-chip"
                                           style="background:{{course.bg}};color:{{course.fg}};border-left:6rpx solid {{course.solid}}"
-                                          data-id="{{course.id}}" bindtap="onCourseTap">
+                                          data-id="{{course.id}}" catchtap="onCourseTap">
                                         <text class="chip-title">{{course.title}}</text>
                                         <text class="chip-time">{{course.timeText}}</text>
                                         <text class="chip-place">{{course.locationText}}</text>
@@ -115,7 +116,7 @@
                         </view>
                     </scroll-view>
                 </view>
-                <view class="grid-tip">本周共 {{weekTotal}} 节课 · 左右滑动查看周一到周日 · 点课程卡片可编辑</view>
+                <view class="grid-tip">本周共 {{weekTotal}} 节课 · 左右滑动查看周一到周日 · 点空格子添加、点课程卡片编辑</view>
             </block>
 
             <!-- 月视图 -->
@@ -180,7 +181,7 @@
     <view wx:if="{{showRolePicker}}" class="role-sheet" catchtap="noop">
         <view class="sheet-handle"></view>
         <text class="section-title">切换使用身份</text>
-        <text class="section-sub">身份会保存在云端，换手机登录后保持不变</text>
+        <text class="section-sub">学生 / 家长 / 老师各有一份独立课表，切换后自动加载对应课程</text>
         <view wx:for="{{roleOptions}}" wx:key="key" class="role-option {{item.selected ? 'role-option-selected' : ''}}"
               data-key="{{item.key}}" bindtap="pickRole">
             <text class="role-option-icon">{{item.icon}}</text>

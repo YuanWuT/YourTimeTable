@@ -14,7 +14,6 @@
         <view class="intro-card">
             <text class="intro-kicker">IMPORT COURSES</text>
             <text class="intro-title">把课表搬进来</text>
-            <text class="intro-desc">四种方式任选，录入结果都保存到云端。换手机、换设备，登录后依然在。</text>
         </view>
 
         <view class="card">
@@ -97,6 +96,14 @@
             <text class="format-note">单双周标记可以写在课程名里，例如「大学英语（单周）」。</text>
         </view>
 
+        <view class="settings-link" bindtap="goGrid">
+            <text>点课表格子添加 / 删除课程</text>
+            <text>›</text>
+        </view>
+        <view class="settings-link" bindtap="goRecycle">
+            <text>已删除的课程（可恢复）</text>
+            <text>›</text>
+        </view>
         <view class="settings-link" bindtap="goSettings">
             <text>作息时间、开学日期与提醒设置</text>
             <text>›</text>

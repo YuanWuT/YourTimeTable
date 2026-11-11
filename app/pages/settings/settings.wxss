@@ -159,3 +159,34 @@
     color: #5a6478;
     line-height: 1.7;
 }
+
+.quick-row {
+    display: flex;
+    align-items: center;
+    margin: 24rpx 0 8rpx;
+}
+
+.quick-label {
+    font-size: 24rpx;
+    color: #5a6478;
+    margin-right: 16rpx;
+    flex: none;
+}
+
+.quick-picker {
+    flex: 1;
+    min-width: 0;
+}
+
+.quick-picker .picker-value {
+    min-height: 68rpx;
+    padding: 12rpx 18rpx;
+    font-size: 25rpx;
+}
+
+.del-text {
+    display: block;
+    text-align: center;
+    font-size: 21rpx;
+    color: #d95050;
+}

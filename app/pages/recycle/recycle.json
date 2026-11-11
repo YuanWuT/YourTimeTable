@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "已删除的课程",
+  "usingComponents": {
+    "login-panel": "../../components/login-panel/login-panel"
+  }
+}

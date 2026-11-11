@@ -53,7 +53,7 @@
                 </view>
                 <text class="role-switch">切换 ›</text>
             </view>
-            <text class="section-sub">学生 / 家长 / 老师可随时切换，身份保存在云端</text>
+            <text class="section-sub">学生 / 家长 / 老师各有一份独立课表，切换后自动加载；身份保存在云端</text>
         </view>
 
         <view class="card menu-card">
@@ -65,6 +65,11 @@
             <view class="menu-item" bindtap="goImport">
                 <text class="menu-icon">📥</text>
                 <text class="grow">录入课程表</text>
+                <text class="menu-arrow">›</text>
+            </view>
+            <view class="menu-item" bindtap="goRecycle">
+                <text class="menu-icon">♻️</text>
+                <text class="grow">已删除的课程（可恢复）</text>
                 <text class="menu-arrow">›</text>
             </view>
         </view>

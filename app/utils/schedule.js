@@ -106,6 +106,21 @@ function isValidTime(value) {
     return /^(\d|0\d|1\d|2[0-3]):[0-5]\d$/.test(String(value || '').trim());
 }
 
+// 宽松时间归一化：接受 8:5、8：40、"8: 40"、08:40 等手写格式，统一成 HH:MM。
+// 解析不了时返回空字符串，由调用方决定保留原值还是给出提示。
+function normalizeTime(value) {
+    const raw = String(value === undefined || value === null ? '' : value)
+        .replace(/[：]/g, ':')
+        .replace(/\s+/g, '')
+        .trim();
+    const match = raw.match(/^(\d{1,2}):(\d{1,2})$/);
+    if (!match) return '';
+    const h = Number(match[1]);
+    const m = Number(match[2]);
+    if (h > 23 || m > 59) return '';
+    return pad2(h) + ':' + pad2(m);
+}
+
 function sortCourses(list) {
     return list.slice().sort((a, b) => {
         if (a.day_of_week !== b.day_of_week) return a.day_of_week - b.day_of_week;
@@ -183,7 +198,14 @@ function buildWeekColumns(courses, periods, monday, parity, todayKey) {
     for (let day = 1; day <= 7; day += 1) {
         const date = addDays(monday, day - 1);
         const key = formatDate(date);
-        const cells = slots.map(slot => ({ key: key + '-' + slot.sort_no, courses: [] }));
+        const cells = slots.map(slot => ({
+            key: key + '-' + slot.sort_no,
+            day: day,
+            periodNo: slot.sort_no,
+            startTime: slot.start_time,
+            endTime: slot.end_time,
+            courses: [],
+        }));
         const matched = [];
         source.forEach((course) => {
             if (Number(course.day_of_week) !== day) return;
@@ -289,6 +311,7 @@ module.exports = {
     courseVisible,
     timeToMinutes,
     isValidTime,
+    normalizeTime,
     sortCourses,
     colorOf,
     styleCourse,

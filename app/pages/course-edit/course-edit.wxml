@@ -16,6 +16,15 @@
             <button wx:if="{{errorText === '这条课程不存在或已被删除'}}" class="plain-btn retry-btn" bindtap="goBack">返回</button>
         </view>
 
+        <view wx:if="{{!isEdit && deletedCount > 0}}" class="card recycle-entry" bindtap="goRecycle">
+            <text class="recycle-icon">♻</text>
+            <view class="grow">
+                <text class="recycle-title">从已删除的课程里恢复</text>
+                <text class="recycle-desc">有 {{deletedCount}} 节课可直接找回，不用重新录入</text>
+            </view>
+            <text class="entry-arrow">›</text>
+        </view>
+
         <view class="card">
             <text class="section-title">课程信息</text>
             <view class="field">
@@ -42,7 +51,7 @@
 
         <view class="card">
             <text class="section-title">时间与周次</text>
-            <text class="section-sub">上课时间可以直接手动填写，也可以按作息节次一键填充</text>
+            <text class="section-sub">选节次会自动带入时间；也可以直接手写，支持 8:40 这类写法</text>
 
             <view class="field">
                 <text class="field-label">星期</text>
@@ -57,18 +66,21 @@
                     <view class="picker-value">{{periodNames[periodIndex]}} <text class="picker-arrow">›</text></view>
                 </picker>
             </view>
+            <view class="inline-link" bindtap="goPeriods">管理作息节次（可增删）›</view>
 
             <view class="time-row">
                 <view class="field grow">
                     <text class="field-label">开始时间</text>
                     <input class="input" type="text" placeholder="08:00" placeholder-class="input-placeholder"
-                           value="{{form.start_time}}" data-field="start_time" bindinput="onFieldInput" maxlength="5" />
+                           value="{{form.start_time}}" data-field="start_time" bindinput="onFieldInput"
+                           bindblur="onTimeBlur" maxlength="8" />
                 </view>
                 <view class="time-dash">–</view>
                 <view class="field grow">
                     <text class="field-label">结束时间</text>
                     <input class="input" type="text" placeholder="08:45" placeholder-class="input-placeholder"
-                           value="{{form.end_time}}" data-field="end_time" bindinput="onFieldInput" maxlength="5" />
+                           value="{{form.end_time}}" data-field="end_time" bindinput="onFieldInput"
+                           bindblur="onTimeBlur" maxlength="8" />
                 </view>
             </view>
 
@@ -112,13 +124,16 @@
 
         <view wx:if="{{isEdit}}" class="danger-zone">
             <button class="danger-btn" bindtap="remove">删除这节课</button>
-            <text class="danger-note">删除会同步移除云端记录，无法恢复</text>
+            <text class="danger-note">删除后可在「已删除的课程」里恢复</text>
         </view>
 
         <view class="bottom-bar-spacer"></view>
-        <view class="bottom-bar row">
-            <button class="plain-btn bar-cancel" bindtap="goBack">取消</button>
-            <button class="primary-btn grow" loading="{{saving}}" disabled="{{saving}}" bindtap="save">保存到云端</button>
+        <view class="bottom-bar-wrap">
+            <view wx:if="{{errorText}}" class="save-error">{{errorText}}</view>
+            <view class="bottom-bar row">
+                <button class="plain-btn bar-cancel" bindtap="goBack">取消</button>
+                <button class="primary-btn grow" loading="{{saving}}" disabled="{{saving}}" bindtap="save">保存到云端</button>
+            </view>
         </view>
     </block>
 </view>

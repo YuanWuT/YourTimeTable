@@ -31,13 +31,21 @@
                 <text class="section-title">作息节次</text>
                 <text class="link-text" bindtap="resetPeriods">恢复默认</text>
             </view>
-            <text class="section-sub">每节课的上课时间都可以手动修改，课表左侧时间轴会跟着变化</text>
+            <text class="section-sub">删节次会立即生效；改时间后点「保存作息」。只有 6 节课可直接选「6 节」</text>
+
+            <view class="quick-row">
+                <text class="quick-label">快捷设节数</text>
+                <picker class="quick-picker" mode="selector" range="{{periodCountLabels}}"
+                        value="{{periodCountIndex}}" bindchange="onQuickCountChange">
+                    <view class="picker-value">当前 {{periods.length}} 节 · 点击调整 <text class="picker-arrow">›</text></view>
+                </picker>
+            </view>
 
             <view class="period-head">
                 <text class="ph-label">节次</text>
                 <text class="ph-time">开始</text>
                 <text class="ph-time">结束</text>
-                <text class="ph-del"></text>
+                <text class="ph-del">操作</text>
             </view>
             <view wx:for="{{periods}}" wx:key="sort_no" class="period-row">
                 <input class="period-input ph-label" value="{{item.label}}" placeholder="第 N 节"
@@ -46,7 +54,7 @@
                        placeholder-class="input-placeholder" data-index="{{index}}" data-field="start_time" bindinput="onPeriodInput" maxlength="5" />
                 <input class="period-input ph-time" value="{{item.end_time}}" placeholder="08:45"
                        placeholder-class="input-placeholder" data-index="{{index}}" data-field="end_time" bindinput="onPeriodInput" maxlength="5" />
-                <view class="ph-del" data-index="{{index}}" bindtap="removePeriod"><text class="del-icon">×</text></view>
+                <view class="ph-del" data-index="{{index}}" bindtap="removePeriod"><text class="del-text">删除</text></view>
             </view>
 
             <view class="period-actions">

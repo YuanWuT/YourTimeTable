@@ -7,7 +7,7 @@ const { DEFAULT_PERIODS, defaultTermStart, sortCourses, normalizePeriods } = req
 const COURSE_COLUMNS = [
     'id', 'title', 'teacher', 'location', 'day_of_week', 'period_no',
     'start_time', 'end_time', 'week_type', 'color', 'note', 'remind',
-    'lead_minutes', 'created_at', 'updated_at',
+    'lead_minutes', 'role', 'deleted', 'deleted_at', 'created_at', 'updated_at',
 ];
 const PERIOD_COLUMNS = ['id', 'sort_no', 'label', 'start_time', 'end_time'];
 const IMPORT_COLUMNS = ['id', 'source', 'file_name', 'storage_path', 'row_count', 'created_at'];
@@ -55,6 +55,9 @@ function courseToRow(course) {
     if (c.note !== undefined) row.note = text(c.note, '', 300);
     if (c.remind !== undefined) row.remind = Boolean(c.remind);
     if (c.lead_minutes !== undefined) row.lead_minutes = int(c.lead_minutes, 0, 180, 15);
+    if (c.role !== undefined) row.role = ROLE_KEYS.indexOf(c.role) >= 0 ? c.role : 'student';
+    if (c.deleted !== undefined) row.deleted = Boolean(c.deleted);
+    if (c.deleted_at !== undefined) row.deleted_at = c.deleted_at || null;
     return row;
 }
 
@@ -74,6 +77,9 @@ function courseFromRow(row) {
         note: r.note || '',
         remind: r.remind !== false,
         lead_minutes: int(r.lead_minutes, 0, 180, 15),
+        role: ROLE_KEYS.indexOf(r.role) >= 0 ? r.role : 'student',
+        deleted: r.deleted === true,
+        deleted_at: r.deleted_at || '',
         created_at: r.created_at || '',
         updated_at: r.updated_at || '',
     };
@@ -210,27 +216,87 @@ async function ensureSettings() {
     return saveSettings({ role: 'student', term_start: defaultTermStart(), remind_enabled: true, default_lead: 15 });
 }
 
-async function listCourses() {
+// 页面加载时先同步一次身份到全局，保证后续 listCourses / createCourse 用对角色。
+async function syncSettings() {
+    const result = await ensureSettings();
+    if (!result.error && result.data) {
+        try {
+            getApp().globalData.settings = result.data;
+        } catch (error) {
+            // 单元测试环境没有 getApp，忽略
+        }
+    }
+    return result;
+}
+
+// 当前身份以全局设置为准；页面切换身份后先更新 globalData.settings 再拉取课程。
+function currentRole() {
+    try {
+        const settings = getApp().globalData.settings;
+        if (settings && ROLE_KEYS.indexOf(settings.role) >= 0) return settings.role;
+    } catch (error) {
+        // 单元测试或页面尚未初始化时退回默认身份
+    }
+    return 'student';
+}
+
+async function listCourses(role) {
+    const wanted = ROLE_KEYS.indexOf(role) >= 0 ? role : currentRole();
     const result = await coursesAccess.list();
     if (result.error) return result;
-    return ok(sortCourses(result.data || []));
+    const visible = (result.data || []).filter(item => !item.deleted && item.role === wanted);
+    return ok(sortCourses(visible));
+}
+
+async function listDeletedCourses(role) {
+    const wanted = ROLE_KEYS.indexOf(role) >= 0 ? role : currentRole();
+    const result = await coursesAccess.list();
+    if (result.error) return result;
+    const deleted = (result.data || []).filter(item => item.deleted && item.role === wanted);
+    return ok(sortCourses(deleted));
 }
 
 function createCourse(payload) {
-    return coursesAccess.create(payload);
+    const source = payload || {};
+    const row = Object.assign({}, source, {
+        role: ROLE_KEYS.indexOf(source.role) >= 0 ? source.role : currentRole(),
+        deleted: false,
+        deleted_at: null,
+    });
+    return coursesAccess.create(row);
 }
 
 function updateCourse(id, patch) {
     return coursesAccess.update(id, patch);
 }
 
+// 删除改为软删除：课程进入「已删除的课程」，可随时恢复，避免误删后重新录入。
 function removeCourse(id) {
+    return coursesAccess.update(id, {
+        deleted: true,
+        deleted_at: new Date().toISOString(),
+    });
+}
+
+function restoreCourse(id) {
+    return coursesAccess.update(id, { deleted: false, deleted_at: null });
+}
+
+function purgeCourse(id) {
     return coursesAccess.remove(id);
 }
 
 async function createCoursesBatch(list) {
     try {
-        const rows = (list || []).map(courseToRow).filter(row => row.title);
+        const role = currentRole();
+        const rows = (list || []).map(item => {
+            const source = item || {};
+            return courseToRow(Object.assign({}, source, {
+                role: ROLE_KEYS.indexOf(source.role) >= 0 ? source.role : role,
+                deleted: false,
+                deleted_at: null,
+            }));
+        }).filter(row => row.title);
         if (rows.length === 0) {
             return fail({ code: 'INVALID_PAYLOAD', message: '没有可导入的课程' });
         }
@@ -323,10 +389,15 @@ module.exports = {
     getSettings,
     saveSettings,
     ensureSettings,
+    syncSettings,
+    currentRole,
     listCourses,
+    listDeletedCourses,
     createCourse,
     updateCourse,
     removeCourse,
+    restoreCourse,
+    purgeCourse,
     createCoursesBatch,
     listPeriods,
     replacePeriods,

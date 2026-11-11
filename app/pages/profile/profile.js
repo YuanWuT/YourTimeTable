@@ -47,9 +47,14 @@ Page({
 
     async load() {
         this.setData({ loading: true, errorText: '' });
+        const settingsResult = await store.syncSettings();
+        if (settingsResult.error) {
+            this.setData({ loading: false, errorText: settingsResult.error.message || '加载失败' });
+            return;
+        }
+        const settings = settingsResult.data;
         const results = await Promise.all([
-            store.ensureSettings(),
-            store.listCourses(),
+            store.listCourses(settings.role),
             store.listPeriods(),
             store.listImports(),
         ]);
@@ -58,7 +63,6 @@ Page({
             this.setData({ loading: false, errorText: problem.error.message || '加载失败' });
             return;
         }
-        const settings = results[0].data;
         const role = ROLES.find(item => item.key === settings.role) || ROLES[0];
         this.settings = settings;
         this.setData({
@@ -68,9 +72,9 @@ Page({
             roleName: role.name,
             roleIcon: role.icon,
             roleDesc: role.desc,
-            courseCount: (results[1].data || []).length,
-            periodCount: (results[2].data || []).length,
-            importCount: (results[3].data || []).length,
+            courseCount: (results[0].data || []).length,
+            periodCount: (results[1].data || []).length,
+            importCount: (results[2].data || []).length,
         });
     },
 
@@ -106,10 +110,16 @@ Page({
         getApp().globalData.settings = result.data;
         this.setData({ role: role.key, roleName: role.name, roleIcon: role.icon, roleDesc: role.desc });
         wx.showToast({ title: '已切换为' + role.name, icon: 'success' });
+        // 重新统计新身份下的课程数量与课表
+        await this.load();
     },
 
     goSettings() {
         wx.navigateTo({ url: '/pages/settings/settings' });
+    },
+
+    goRecycle() {
+        wx.navigateTo({ url: '/pages/recycle/recycle' });
     },
 
     goImport() {

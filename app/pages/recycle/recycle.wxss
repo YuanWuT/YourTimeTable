@@ -1,0 +1,61 @@
+.recycle-page {
+    padding-top: 24rpx;
+}
+
+.error-card {
+    padding: 24rpx 26rpx;
+    margin-bottom: 20rpx;
+    background: #fff3f1;
+    border: 2rpx solid #ffd9d2;
+    border-radius: 20rpx;
+}
+
+.error-desc {
+    font-size: 26rpx;
+    color: #b94c37;
+    line-height: 1.6;
+}
+
+.retry-btn {
+    margin-top: 18rpx;
+    width: 180rpx;
+}
+
+.recycle-item {
+    padding: 22rpx 24rpx;
+}
+
+.ri-title {
+    display: block;
+    font-size: 29rpx;
+    font-weight: 600;
+    color: #1b2437;
+}
+
+.ri-meta {
+    display: block;
+    margin-top: 6rpx;
+    font-size: 23rpx;
+    color: #8a94a6;
+}
+
+.ri-actions {
+    display: flex;
+    margin-top: 18rpx;
+}
+
+.ri-actions button {
+    flex: 1;
+    margin: 0 8rpx;
+    font-size: 24rpx;
+}
+
+.recycle-footer {
+    display: flex;
+    margin-top: 12rpx;
+}
+
+.recycle-footer button {
+    flex: 1;
+    margin: 0 8rpx;
+}

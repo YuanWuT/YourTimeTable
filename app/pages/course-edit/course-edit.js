@@ -46,10 +46,14 @@ Page({
         leadOptions: LEAD_OPTIONS,
         leadLabels: LEAD_OPTIONS.map(value => value === 0 ? '上课时提醒' : '提前 ' + value + ' 分钟'),
         leadIndex: 3,
+        deletedCount: 0,
     },
 
     onLoad(options) {
         this.courseId = options && options.id ? options.id : null;
+        // 网格录入页点空格子时会带上 day / period，用来预填星期与上课时间
+        this.presetDay = options && options.day ? Number(options.day) : 0;
+        this.presetPeriod = options && options.period ? Number(options.period) : 0;
         wx.setNavigationBarTitle({ title: this.courseId ? '编辑课程' : '添加课程' });
         this.setData({ isEdit: Boolean(this.courseId) });
     },
@@ -72,16 +76,28 @@ Page({
 
     async load() {
         this.setData({ loading: true, errorText: '' });
-        const periodsResult = await store.listPeriods();
+        const settingsResult = await store.syncSettings();
+        if (settingsResult.error) {
+            this.setData({ loading: false, errorText: settingsResult.error.message || '加载设置失败' });
+            return;
+        }
+        const role = settingsResult.data.role;
+        const [periodsResult, deletedResult] = await Promise.all([
+            store.listPeriods(),
+            store.listDeletedCourses(role),
+        ]);
         if (periodsResult.error) {
             this.setData({ loading: false, errorText: periodsResult.error.message || '加载作息失败' });
             return;
         }
         const periods = periodsResult.data || [];
-        const periodNames = periods.map(item => item.label + '  ' + item.start_time + '–' + item.end_time);
+        // 第 0 项是「自定义时间」，手动改过时间后就停在这一项
+        const periodNames = ['自定义时间'].concat(
+            periods.map(item => item.label + '  ' + item.start_time + '–' + item.end_time),
+        );
         let form = emptyForm();
         if (this.courseId) {
-            const coursesResult = await store.listCourses();
+            const coursesResult = await store.listCourses(role);
             if (coursesResult.error) {
                 this.setData({ loading: false, errorText: coursesResult.error.message || '加载课程失败' });
                 return;
@@ -92,11 +108,21 @@ Page({
                 return;
             }
             form = Object.assign(emptyForm(), found);
+        } else {
+            if (this.presetDay >= 1 && this.presetDay <= 7) form.day_of_week = this.presetDay;
+            if (this.presetPeriod > 0) {
+                const slot = periods.find(item => Number(item.sort_no) === this.presetPeriod);
+                if (slot) {
+                    form.period_no = slot.sort_no;
+                    form.start_time = slot.start_time;
+                    form.end_time = slot.end_time;
+                }
+            }
         }
         const leadIndex = Math.max(0, LEAD_OPTIONS.indexOf(Number(form.lead_minutes)));
         const colors = COURSE_COLORS.map(item => Object.assign({}, item, { selected: item.key === form.color }));
         const weekTypes = WEEK_TYPES.map(item => Object.assign({}, item, { selected: item.key === form.week_type }));
-        const periodIndex = Math.max(0, periods.findIndex(item => Number(item.sort_no) === Number(form.period_no)));
+        const foundIndex = periods.findIndex(item => Number(item.sort_no) === Number(form.period_no));
         this.setData({
             loading: false,
             errorText: '',
@@ -104,10 +130,11 @@ Page({
             dayIndex: Number(form.day_of_week) - 1,
             periods: periods,
             periodNames: periodNames,
-            periodIndex: periodIndex,
+            periodIndex: Number(form.period_no) > 0 && foundIndex >= 0 ? foundIndex + 1 : 0,
             colors: colors,
             weekTypes: weekTypes,
             leadIndex: leadIndex,
+            deletedCount: (deletedResult.data || []).length,
         });
     },
 
@@ -116,7 +143,23 @@ Page({
         if (!field) return;
         const form = Object.assign({}, this.data.form);
         form[field] = event.detail.value;
-        this.setData({ form: form, errorText: '' });
+        // 手动改过时间后就不再按旧节次定位，否则课表会把课程放回原来的节次行
+        const patch = { form: form, errorText: '' };
+        if ((field === 'start_time' || field === 'end_time') && this.data.periodIndex !== 0) {
+            form.period_no = 0;
+            patch.periodIndex = 0;
+        }
+        this.setData(patch);
+    },
+
+    onTimeBlur(event) {
+        const field = event.currentTarget.dataset.field;
+        if (field !== 'start_time' && field !== 'end_time') return;
+        const normalized = S.normalizeTime(event.detail.value);
+        if (!normalized) return;
+        const form = Object.assign({}, this.data.form);
+        form[field] = normalized;
+        this.setData({ form: form });
     },
 
     onDayChange(event) {
@@ -127,7 +170,12 @@ Page({
 
     onPeriodChange(event) {
         const index = Number(event.detail.value) || 0;
-        const period = this.data.periods[index];
+        if (index === 0) {
+            const form = Object.assign({}, this.data.form, { period_no: 0 });
+            this.setData({ periodIndex: 0, form: form, errorText: '' });
+            return;
+        }
+        const period = this.data.periods[index - 1];
         if (!period) return;
         const form = Object.assign({}, this.data.form, {
             period_no: period.sort_no,
@@ -169,21 +217,38 @@ Page({
         return '';
     },
 
+    // 校验失败必须让用户看见：按钮上方红字 + toast + 回到页面顶部，避免「点了没反应」
+    showError(message) {
+        this.setData({ errorText: message });
+        wx.showToast({ title: message, icon: 'none', duration: 2500 });
+        wx.pageScrollTo({ scrollTop: 0, duration: 200 });
+    },
+
     async save() {
         if (this.data.saving) return;
-        const form = Object.assign({}, this.data.form, { title: String(this.data.form.title || '').trim() });
+        const raw = this.data.form;
+        const form = Object.assign({}, raw, {
+            title: String(raw.title || '').trim(),
+            start_time: S.normalizeTime(raw.start_time) || String(raw.start_time || '').trim(),
+            end_time: S.normalizeTime(raw.end_time) || String(raw.end_time || '').trim(),
+        });
         const message = this.validate(form);
         if (message) {
-            this.setData({ errorText: message });
+            this.showError(message);
             return;
         }
-        this.setData({ saving: true, errorText: '' });
-        const result = this.courseId
-            ? await store.updateCourse(this.courseId, form)
-            : await store.createCourse(form);
+        this.setData({ form: form, saving: true, errorText: '' });
+        let result;
+        try {
+            result = this.courseId
+                ? await store.updateCourse(this.courseId, form)
+                : await store.createCourse(form);
+        } catch (error) {
+            result = { error: { message: (error && error.message) || '保存失败，请重试' } };
+        }
         this.setData({ saving: false });
         if (result.error) {
-            this.setData({ errorText: result.error.message || '保存失败，请重试' });
+            this.showError(result.error.message || '保存失败，请重试');
             return;
         }
         wx.showToast({ title: '已保存到云端', icon: 'success' });
@@ -195,7 +260,7 @@ Page({
         const confirmed = await new Promise((resolve) => {
             wx.showModal({
                 title: '删除这节课？',
-                content: '删除后云端记录也会移除，此操作不可撤销。',
+                content: '删除后会进入「已删除的课程」，可以随时恢复，不用重新录入。',
                 confirmText: '删除',
                 confirmColor: '#d95050',
                 success: res => resolve(Boolean(res.confirm)),
@@ -210,8 +275,16 @@ Page({
             wx.showToast({ title: result.error.message || '删除失败', icon: 'none' });
             return;
         }
-        wx.showToast({ title: '已删除', icon: 'success' });
+        wx.showToast({ title: '已移入已删除', icon: 'success' });
         setTimeout(() => wx.navigateBack(), 700);
+    },
+
+    goRecycle() {
+        wx.navigateTo({ url: '/pages/recycle/recycle' });
+    },
+
+    goPeriods() {
+        wx.navigateTo({ url: '/pages/settings/settings' });
     },
 
     goBack() {

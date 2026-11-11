@@ -4,7 +4,9 @@
     "pages/import/import",
     "pages/profile/profile",
     "pages/course-edit/course-edit",
-    "pages/settings/settings"
+    "pages/settings/settings",
+    "pages/grid/grid",
+    "pages/recycle/recycle"
   ],
   "window": {
     "navigationBarTitleText": "你的课程表",

@@ -149,3 +149,49 @@
     width: 180rpx;
     margin-right: 16rpx;
 }
+
+.recycle-entry {
+    display: flex;
+    align-items: center;
+    padding: 22rpx 24rpx;
+}
+
+.recycle-icon {
+    font-size: 36rpx;
+    margin-right: 18rpx;
+}
+
+.recycle-title {
+    display: block;
+    font-size: 27rpx;
+    font-weight: 600;
+    color: #1b2437;
+}
+
+.recycle-desc {
+    display: block;
+    margin-top: 6rpx;
+    font-size: 22rpx;
+    color: #8a94a6;
+}
+
+.inline-link {
+    margin: -4rpx 0 20rpx;
+    font-size: 23rpx;
+    color: #2f6bed;
+}
+
+/* 校验失败时紧贴保存按钮上方提示，避免用户以为点击没反应 */
+.save-error {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(124rpx + env(safe-area-inset-bottom));
+    padding: 14rpx 24rpx;
+    background: #fff3f1;
+    border-top: 2rpx solid #ffd9d2;
+    color: #b94c37;
+    font-size: 24rpx;
+    text-align: center;
+    z-index: 21;
+}

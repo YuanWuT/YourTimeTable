@@ -1,0 +1,44 @@
+<view class="page page-safe recycle-page">
+    <block wx:if="{{authState === 'checking' || loading}}">
+        <view class="loading-box">
+            <view class="spinner"></view>
+            <text class="empty-desc">正在加载…</text>
+        </view>
+    </block>
+
+    <block wx:elif="{{authState === 'signed-out'}}">
+        <login-panel title="登录后查看已删除课程" bind:signedin="onRetry" bind:demo="onDemo" />
+    </block>
+
+    <block wx:else>
+        <view wx:if="{{errorText}}" class="error-card">
+            <text class="error-desc">{{errorText}}</text>
+            <button class="plain-btn retry-btn" bindtap="onRetry">重新加载</button>
+        </view>
+
+        <view class="card">
+            <text class="section-title">已删除的课程</text>
+            <text class="section-sub">误删的课在这里一键恢复，不用重新录入；只有「彻底删除」后才无法找回</text>
+        </view>
+
+        <view wx:if="{{items.length === 0}}" class="empty-card">
+            <text class="empty-title">这里还是空的</text>
+            <text class="empty-desc">删除课程后会出现在这里，随时可以恢复</text>
+        </view>
+
+        <view wx:for="{{items}}" wx:key="id" class="card recycle-item" style="border-left:8rpx solid {{item.solid}}">
+            <text class="ri-title">{{item.title}}</text>
+            <text class="ri-meta">{{item.dayText}} {{item.timeText}} · {{item.locationText}} · {{item.weekText}}</text>
+            <text wx:if="{{item.teacherText}}" class="ri-meta">{{item.teacherText}}</text>
+            <view class="ri-actions">
+                <button class="ghost-btn" data-id="{{item.id}}" bindtap="restoreOne">恢复到课表</button>
+                <button class="plain-btn" data-id="{{item.id}}" bindtap="purgeOne">彻底删除</button>
+            </view>
+        </view>
+
+        <view class="recycle-footer">
+            <button class="plain-btn" bindtap="goBack">返回</button>
+            <button class="primary-btn" bindtap="goSchedule">查看课表</button>
+        </view>
+    </block>
+</view>

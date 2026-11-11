@@ -3,7 +3,7 @@ const importer = require('../../utils/importer');
 const S = require('../../utils/schedule');
 
 const ENTRIES = [
-    { key: 'manual', icon: '✍️', title: '手动录入', desc: '逐条填写课程名、星期、时间、地点', tag: '最准确' },
+    { key: 'manual', icon: '✍️', title: '手动录入', desc: '显示课表网格，点对应节次添加或删除', tag: '最准确' },
     { key: 'photo', icon: '📷', title: '拍照 / 相册识别', desc: '拍下纸质课表，自动识别成课程', tag: 'AI 识别' },
     { key: 'excel', icon: '📊', title: 'Excel / CSV 表格', desc: '上传 .xlsx 或 .csv 批量导入', tag: '批量' },
     { key: 'text', icon: '📋', title: '粘贴文字', desc: '把课表文字粘贴进来自动整理', tag: 'AI 整理' },
@@ -108,6 +108,16 @@ Page({
             return;
         }
         this.session = result.data;
+        // 识别 / 解析需要用户当前的作息节次，用来把「第N节」还原成具体时间
+        const [settingsResult, periodsResult] = await Promise.all([
+            store.syncSettings(),
+            store.listPeriods(),
+        ]);
+        this.periods = periodsResult.error ? [] : (periodsResult.data || []);
+        if (settingsResult.error) {
+            this.setData({ authState: 'signed-in', errorText: settingsResult.error.message || '加载设置失败' });
+            return;
+        }
         this.setData({ authState: 'signed-in' });
     },
 
@@ -173,7 +183,7 @@ Page({
         if (!key || this.data.busy) return;
         this.clearError();
         if (key === 'manual') {
-            wx.navigateTo({ url: '/pages/course-edit/course-edit' });
+            wx.navigateTo({ url: '/pages/grid/grid' });
             return;
         }
         if (key === 'text') {
@@ -193,7 +203,11 @@ Page({
                 const fs = wx.getFileSystemManager();
                 const base64 = fs.readFileSync(picked.path, 'base64');
                 const storagePath = await this.uploadBestEffort(picked.path, picked.path);
-                const result = await importer.llmExtract({ imageBase64: base64, imageMime: ext === 'png' ? 'image/png' : 'image/jpeg' });
+                const result = await importer.llmExtract({
+                    imageBase64: base64,
+                    imageMime: ext === 'png' ? 'image/png' : 'image/jpeg',
+                    periods: this.periods,
+                });
                 if (result.error) {
                     this.showError(result.error.message);
                     return;
@@ -210,7 +224,7 @@ Page({
             try {
                 const picked = await pickFile();
                 this.setData({ busyText: '正在解析表格…' });
-                const result = await importer.readTable(picked.path, picked.name);
+                const result = await importer.readTable(picked.path, picked.name, this.periods);
                 if (result.error) {
                     this.showError(result.error.message);
                     return;
@@ -240,7 +254,7 @@ Page({
         }
         if (this.data.busy) return;
         this.setData({ busy: true, busyText: '正在整理课表文字…', errorText: '' });
-        const result = await importer.llmExtract({ text: text });
+        const result = await importer.llmExtract({ text: text, periods: this.periods });
         if (result.error) {
             this.showError(result.error.message);
             return;
@@ -306,6 +320,14 @@ Page({
         wx.showToast({ title: '已导入 ' + result.data.length + ' 节课', icon: 'success' });
         this.setData({ reviewVisible: false, reviewCourses: [], selectedCount: 0, textInput: '' });
         setTimeout(() => wx.switchTab({ url: '/pages/index/index' }), 900);
+    },
+
+    goGrid() {
+        wx.navigateTo({ url: '/pages/grid/grid' });
+    },
+
+    goRecycle() {
+        wx.navigateTo({ url: '/pages/recycle/recycle' });
     },
 
     goSettings() {

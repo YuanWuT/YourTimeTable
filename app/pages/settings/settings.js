@@ -3,6 +3,7 @@ const reminder = require('../../utils/reminder');
 const S = require('../../utils/schedule');
 
 const LEAD_OPTIONS = [0, 5, 10, 15, 20, 30, 45, 60];
+const PERIOD_COUNT_OPTIONS = [4, 5, 6, 7, 8, 10, 12];
 
 Page({
     data: {
@@ -19,6 +20,9 @@ Page({
         subscribeStatus: '未开启',
         courseCount: 0,
         calendarBusy: false,
+        periodCountOptions: PERIOD_COUNT_OPTIONS,
+        periodCountLabels: PERIOD_COUNT_OPTIONS.map(n => n + ' 节'),
+        periodCountIndex: 3,
     },
 
     onShow() {
@@ -39,19 +43,23 @@ Page({
 
     async load() {
         this.setData({ loading: true, errorText: '' });
+        const settingsResult = await store.syncSettings();
+        if (settingsResult.error) {
+            this.setData({ loading: false, errorText: settingsResult.error.message || '加载设置失败' });
+            return;
+        }
+        const settings = settingsResult.data;
         const results = await Promise.all([
-            store.ensureSettings(),
             store.listPeriods(),
-            store.listCourses(),
+            store.listCourses(settings.role),
         ]);
         const problem = results.find(item => item && item.error);
         if (problem) {
             this.setData({ loading: false, errorText: problem.error.message || '加载设置失败' });
             return;
         }
-        const settings = results[0].data;
-        const periods = results[1].data || [];
-        const courses = results[2].data || [];
+        const periods = results[0].data || [];
+        const courses = results[1].data || [];
         this.settings = settings;
         this.courses = courses;
         let subscribeStatus = '未开启';
@@ -72,6 +80,7 @@ Page({
             templatesReady: reminder.templatesReady(),
             subscribeStatus: subscribeStatus,
             courseCount: courses.length,
+            periodCountIndex: Math.max(0, PERIOD_COUNT_OPTIONS.indexOf(periods.length)),
         });
     },
 
@@ -131,7 +140,29 @@ Page({
         this.setData({ periods: periods });
     },
 
-    removePeriod(event) {
+    // 删除 / 快捷设节数都即时写云端，避免用户以为「没生效」
+    async persistPeriods(next, successText) {
+        const message = this.validatePeriods(next);
+        if (message) {
+            wx.showToast({ title: message, icon: 'none' });
+            return;
+        }
+        this.setData({ periods: next, saving: true, errorText: '' });
+        const result = await store.replacePeriods(next);
+        this.setData({ saving: false });
+        if (result.error) {
+            this.setData({ errorText: result.error.message || '保存作息失败' });
+            return;
+        }
+        const saved = (result.data || []).map(item => Object.assign({}, item));
+        this.setData({
+            periods: saved,
+            periodCountIndex: Math.max(0, PERIOD_COUNT_OPTIONS.indexOf(saved.length)),
+        });
+        wx.showToast({ title: successText, icon: 'success' });
+    },
+
+    async removePeriod(event) {
         const index = Number(event.currentTarget.dataset.index);
         const periods = this.data.periods.slice();
         if (periods.length <= 1) {
@@ -139,7 +170,37 @@ Page({
             return;
         }
         periods.splice(index, 1);
-        this.setData({ periods: periods.map((item, i) => Object.assign({}, item, { sort_no: i + 1 })) });
+        await this.persistPeriods(
+            periods.map((item, i) => Object.assign({}, item, { sort_no: i + 1 })),
+            '已删除该节次',
+        );
+    },
+
+    async onQuickCountChange(event) {
+        const index = Number(event.detail.value) || 0;
+        const target = PERIOD_COUNT_OPTIONS[index];
+        if (!target) return;
+        const periods = this.data.periods.slice();
+        if (target > periods.length) {
+            while (periods.length < target) {
+                const last = periods[periods.length - 1];
+                const lastEnd = last ? S.timeToMinutes(last.end_time) : -1;
+                const startMinutes = lastEnd < 0 ? 480 : lastEnd + 10;
+                periods.push({
+                    id: null,
+                    sort_no: periods.length + 1,
+                    label: '第 ' + (periods.length + 1) + ' 节',
+                    start_time: toTime(startMinutes),
+                    end_time: toTime(startMinutes + 45),
+                });
+            }
+        } else {
+            periods.splice(target);
+        }
+        await this.persistPeriods(
+            periods.map((item, i) => Object.assign({}, item, { sort_no: i + 1 })),
+            '已设为 ' + target + ' 节',
+        );
     },
 
     validatePeriods(periods) {
