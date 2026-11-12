@@ -1,5 +1,8 @@
-# 微信开发者工具「构建 npm」产物（若生成则不入库，避免与 node_modules 重复）
-app/miniprogram_npm/
+# 「构建 npm」产物：本项目只依赖一个云 SDK，其小程序可加载产物（约 170 KB）随仓库分发。
+# 这样另一台电脑 clone 后无需微信开发者工具、无需 npm install 就能直接预览运行。
+# 升级 app/node_modules 里的 SDK 后，把 miniprogram_dist/miniprogram.js 重新复制到
+# app/miniprogram_npm/@tencent-ai/workbuddy-cloud-sdk/miniprogram.js 再提交即可。
+# 若将来新增其他 npm 依赖，可在此单独排除其构建目录。
 
 # 微信开发者工具 / 编辑器的个人本地配置（每台机器可能不同）
 project.private.config.json
@@ -14,7 +17,7 @@ Thumbs.db
 *.tmp
 .tmp/
 
-# 说明：app/node_modules 有意入库（约 1.6 MB 云 SDK）。
-# 目的是另一台电脑 pull 后开箱即用，SDK 版本与本机完全一致，无需 npm install / 联网。
+# 说明：app/node_modules 与 app/miniprogram_npm 均有意入库（合计约 1.8 MB 云 SDK）。
+# 目的是另一台电脑 clone / pull 后开箱即用，SDK 版本与本机完全一致，无需 npm install / 联网。
 # package-lock.json 同样入库，作为依赖版本的唯一权威记录。
 # .genie 应用卡、.workbuddy 项目配置、隐私清单均为项目资产，需要入库。
