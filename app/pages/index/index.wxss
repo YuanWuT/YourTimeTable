@@ -201,6 +201,17 @@
     opacity: 0.9;
 }
 
+/* 老师 / 备注：有值才显示，单行省略，避免把蓝色卡片撑得过高 */
+.next-extra {
+    display: block;
+    margin-top: 4rpx;
+    font-size: 22rpx;
+    opacity: 0.88;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
 .next-right {
     margin-left: 20rpx;
     flex: none;
@@ -334,7 +345,7 @@
 .course-chip {
     display: flex;
     flex-direction: column;
-    padding: 8rpx 10rpx;
+    padding: 6rpx 10rpx;
     margin-bottom: 6rpx;
     border-radius: 10rpx;
     overflow: hidden;
@@ -364,10 +375,15 @@
     text-overflow: ellipsis;
 }
 
-.chip-week {
+/* 老师 + 备注合并成一行，单双周并入时间行，保证 136rpx 格子里不溢出 */
+.chip-extra {
     font-size: 17rpx;
-    margin-top: 4rpx;
-    font-weight: 600;
+    margin-top: 2rpx;
+    opacity: 0.78;
+    line-height: 1.25;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .grid-tip {

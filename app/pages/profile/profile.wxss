@@ -105,6 +105,10 @@
     border-right: none;
 }
 
+.stat-item-hover {
+    background: #f2f6ff;
+}
+
 .stat-number {
     font-size: 40rpx;
     font-weight: 700;
@@ -115,6 +119,12 @@
     font-size: 22rpx;
     color: #8a94a6;
     margin-top: 6rpx;
+}
+
+.stat-more {
+    font-size: 20rpx;
+    color: #2f6bed;
+    margin-top: 8rpx;
 }
 
 .role-current {

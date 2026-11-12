@@ -47,6 +47,54 @@
     min-width: 0;
 }
 
+/* 备注字数上限提示 */
+.field-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.field-count {
+    font-size: 21rpx;
+    color: #8a94a6;
+    margin-bottom: 12rpx;
+}
+
+/* 时间改为按「时 / 分」两列选择，不再需要手输冒号 */
+.time-picker-value {
+    justify-content: flex-start;
+}
+
+.time-picker-value .picker-arrow {
+    margin-left: auto;
+}
+
+.time-part {
+    font-size: 30rpx;
+    font-weight: 600;
+    color: #1b2437;
+}
+
+.time-unit {
+    font-size: 19rpx;
+    color: #8a94a6;
+    margin: 0 6rpx 0 2rpx;
+}
+
+.time-colon {
+    font-size: 28rpx;
+    color: #8a94a6;
+    margin-right: 6rpx;
+}
+
+.time-hint {
+    display: block;
+    margin: -8rpx 0 20rpx;
+    font-size: 21rpx;
+    color: #8a94a6;
+    line-height: 1.5;
+}
+
 .time-dash {
     width: 44rpx;
     flex: none;
@@ -175,10 +223,38 @@
     color: #8a94a6;
 }
 
+/* 课程信息卡片：整体缩小约 10%，让时间与周次区在首屏露出更多 */
+.compact-card {
+    padding: 25rpx;
+}
+
+.compact-card .field {
+    margin-bottom: 22rpx;
+}
+
+.compact-card .field-label {
+    font-size: 23rpx;
+    margin-bottom: 11rpx;
+}
+
+.compact-card .input {
+    min-height: 76rpx;
+    padding: 16rpx 20rpx;
+    font-size: 25rpx;
+    border-radius: 14rpx;
+}
+
 .inline-link {
     margin: -4rpx 0 20rpx;
     font-size: 23rpx;
     color: #2f6bed;
+}
+
+/* 「管理作息节次」移到时间与周次卡片上部，右对齐，不再夹在快速填充下面 */
+.head-period-link {
+    display: block;
+    text-align: right;
+    margin: -2rpx 0 18rpx;
 }
 
 /* 校验失败时紧贴保存按钮上方提示，避免用户以为点击没反应 */

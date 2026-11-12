@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "导入记录",
+  "usingComponents": {
+    "login-panel": "../../components/login-panel/login-panel"
+  }
+}

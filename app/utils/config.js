@@ -12,6 +12,10 @@ const publicConfig = {
 // 留空时应用不会调用 wx.requestSubscribeMessage，而是给出明确的配置提示，避免运行时报错。
 const SUBSCRIBE_TEMPLATE_IDS = [];
 
+// 备注在课表格子里要和时间、地点挤在一起，限制录入字数才能保证显示整洁。
+// 手工录入、Excel/拍照导入、云端写入都统一使用这个值。
+const NOTE_MAX_LENGTH = 20;
+
 const ROLES = [
     { key: 'student', name: '学生', icon: '🎒', desc: '管理我自己的课表' },
     { key: 'parent', name: '家长', icon: '👨‍👩‍👧', desc: '查看孩子的上课安排' },
@@ -30,6 +34,7 @@ const COURSE_COLORS = [
 module.exports = {
     publicConfig,
     SUBSCRIBE_TEMPLATE_IDS,
+    NOTE_MAX_LENGTH,
     ROLES,
     COURSE_COLORS,
 };

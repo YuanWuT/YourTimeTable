@@ -69,6 +69,8 @@
                     <text class="next-kicker">下一节课 · {{nextCourse.when}}</text>
                     <text class="next-title">{{nextCourse.title}}</text>
                     <text class="next-meta">{{nextCourse.timeText}} · {{nextCourse.locationText}}</text>
+                    <text wx:if="{{nextCourse.teacherText}}" class="next-extra">老师 · {{nextCourse.teacherText}}</text>
+                    <text wx:if="{{nextCourse.noteText}}" class="next-extra">备注 · {{nextCourse.noteText}}</text>
                 </view>
                 <view class="next-right">
                     <text class="next-count">{{nextCourse.countdown}}</text>
@@ -107,9 +109,9 @@
                                           style="background:{{course.bg}};color:{{course.fg}};border-left:6rpx solid {{course.solid}}"
                                           data-id="{{course.id}}" catchtap="onCourseTap">
                                         <text class="chip-title">{{course.title}}</text>
-                                        <text class="chip-time">{{course.timeText}}</text>
+                                        <text class="chip-time">{{course.chipTimeText}}</text>
                                         <text class="chip-place">{{course.locationText}}</text>
-                                        <text wx:if="{{course.weekText !== '每周'}}" class="chip-week">{{course.weekText}}</text>
+                                        <text wx:if="{{course.chipExtraText}}" class="chip-extra">{{course.chipExtraText}}</text>
                                     </view>
                                 </view>
                             </view>
@@ -166,7 +168,8 @@
                     <text class="sheet-time">{{item.timeText}}</text>
                 </view>
                 <text class="sheet-meta">{{item.locationText}}</text>
-                <text wx:if="{{item.teacherText}}" class="sheet-meta">{{item.teacherText}}</text>
+                <text wx:if="{{item.teacherText}}" class="sheet-meta">老师 · {{item.teacherText}}</text>
+                <text wx:if="{{item.noteText}}" class="sheet-meta">备注 · {{item.noteText}}</text>
                 <text wx:if="{{item.weekText !== '每周'}}" class="tag sheet-tag">{{item.weekText}}</text>
             </view>
             <view wx:if="{{selectedDayCourses.length === 0}}" class="empty-box">

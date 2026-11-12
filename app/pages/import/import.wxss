@@ -238,6 +238,50 @@
     line-height: 1.6;
 }
 
+/* Excel 模板下载入口 */
+.template-link {
+    display: flex;
+    align-items: center;
+    margin-top: 18rpx;
+    padding: 18rpx 20rpx;
+    background: #eaf1ff;
+    border: 2rpx solid #d7e4ff;
+    border-radius: 14rpx;
+}
+
+.template-link-hover {
+    background: #dbe8ff;
+}
+
+.template-icon {
+    font-size: 30rpx;
+    color: #2f6bed;
+    margin-right: 16rpx;
+    flex: none;
+}
+
+.template-title {
+    display: block;
+    font-size: 25rpx;
+    font-weight: 600;
+    color: #2f6bed;
+}
+
+.template-desc {
+    display: block;
+    margin-top: 4rpx;
+    font-size: 21rpx;
+    color: #5a6478;
+    line-height: 1.5;
+}
+
+.template-arrow {
+    font-size: 34rpx;
+    color: #2f6bed;
+    margin-left: 12rpx;
+    flex: none;
+}
+
 .settings-link {
     display: flex;
     align-items: center;

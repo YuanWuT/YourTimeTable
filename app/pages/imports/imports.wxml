@@ -1,0 +1,47 @@
+<view class="page page-safe imports-page">
+    <block wx:if="{{authState === 'checking' || loading}}">
+        <view class="loading-box">
+            <view class="spinner"></view>
+            <text class="empty-desc">正在加载导入记录…</text>
+        </view>
+    </block>
+
+    <block wx:elif="{{authState === 'signed-out'}}">
+        <login-panel title="登录后查看导入记录" bind:signedin="onRetry" bind:demo="onDemo" />
+    </block>
+
+    <block wx:else>
+        <view wx:if="{{errorText}}" class="error-card">
+            <text class="error-desc">{{errorText}}</text>
+            <button class="plain-btn retry-btn" bindtap="onRetry">重新加载</button>
+        </view>
+
+        <view class="card">
+            <text class="section-title">导入记录</text>
+            <text class="section-sub">每次识别或导入都会留一条记录，共 {{items.length}} 次 · 累计识别 {{totalRows}} 节课；课程本身可在课表页查看</text>
+        </view>
+
+        <view wx:if="{{items.length === 0}}" class="empty-card">
+            <text class="empty-title">还没有导入记录</text>
+            <text class="empty-desc">拍照识别、Excel 导入或粘贴文字整理后，这里会记下来源和时间</text>
+        </view>
+
+        <view wx:for="{{items}}" wx:key="id" class="card import-item">
+            <view class="row">
+                <text class="import-icon">{{item.icon}}</text>
+                <view class="grow">
+                    <text class="import-title">{{item.label}}</text>
+                    <text class="import-meta">{{item.timeText}}</text>
+                </view>
+                <text class="import-count">{{item.rowCount}} 节</text>
+            </view>
+            <text class="import-file">{{item.fileName}}</text>
+            <text wx:if="{{item.hasFile}}" class="import-cloud">原始文件已存云端</text>
+        </view>
+
+        <view class="imports-footer">
+            <button class="plain-btn" bindtap="goBack">返回</button>
+            <button class="primary-btn" bindtap="goImport">去录入课程表</button>
+        </view>
+    </block>
+</view>

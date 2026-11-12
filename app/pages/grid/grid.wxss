@@ -134,6 +134,18 @@
     opacity: 0.8;
 }
 
+/* 老师 + 备注合并成一行，超长省略 */
+.chip-extra {
+    display: block;
+    font-size: 17rpx;
+    margin-top: 2rpx;
+    opacity: 0.78;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .cell-add {
     height: 100%;
     display: flex;

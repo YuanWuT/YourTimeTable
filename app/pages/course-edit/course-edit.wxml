@@ -25,7 +25,7 @@
             <text class="entry-arrow">›</text>
         </view>
 
-        <view class="card">
+        <view class="card compact-card">
             <text class="section-title">课程信息</text>
             <view class="field">
                 <text class="field-label">课程名称 *</text>
@@ -43,15 +43,19 @@
                        value="{{form.location}}" data-field="location" bindinput="onFieldInput" maxlength="80" />
             </view>
             <view class="field">
-                <text class="field-label">备注</text>
-                <input class="input" placeholder="选填，例如：带练习册" placeholder-class="input-placeholder"
-                       value="{{form.note}}" data-field="note" bindinput="onFieldInput" maxlength="200" />
+                <view class="field-head">
+                    <text class="field-label">备注</text>
+                    <text class="field-count">{{noteLength}}/{{noteMax}} 字</text>
+                </view>
+                <input class="input" placeholder="选填，最多 {{noteMax}} 字，例如：带练习册" placeholder-class="input-placeholder"
+                       value="{{form.note}}" data-field="note" bindinput="onFieldInput" maxlength="{{noteMax}}" />
             </view>
         </view>
 
         <view class="card">
             <text class="section-title">时间与周次</text>
-            <text class="section-sub">选节次会自动带入时间；也可以直接手写，支持 8:40 这类写法</text>
+            <text class="section-sub">选节次会自动带入时间；也可以点下面按小时、分钟选择，不用输入冒号</text>
+            <view class="inline-link head-period-link" bindtap="goPeriods">管理作息节次（可增删）›</view>
 
             <view class="field">
                 <text class="field-label">星期</text>
@@ -66,23 +70,36 @@
                     <view class="picker-value">{{periodNames[periodIndex]}} <text class="picker-arrow">›</text></view>
                 </picker>
             </view>
-            <view class="inline-link" bindtap="goPeriods">管理作息节次（可增删）›</view>
-
             <view class="time-row">
                 <view class="field grow">
                     <text class="field-label">开始时间</text>
-                    <input class="input" type="text" placeholder="08:00" placeholder-class="input-placeholder"
-                           value="{{form.start_time}}" data-field="start_time" bindinput="onFieldInput"
-                           bindblur="onTimeBlur" maxlength="8" />
+                    <picker mode="multiSelector" range="{{timeRange}}" value="{{startParts}}"
+                            data-field="start_time" data-which="start"
+                            bindchange="onTimeChange" bindcolumnchange="onTimeColumnChange">
+                        <view class="picker-value time-picker-value">
+                            <text class="time-part">{{startHour}}</text><text class="time-unit">时</text>
+                            <text class="time-colon">:</text>
+                            <text class="time-part">{{startMinute}}</text><text class="time-unit">分</text>
+                            <text class="picker-arrow">›</text>
+                        </view>
+                    </picker>
                 </view>
                 <view class="time-dash">–</view>
                 <view class="field grow">
                     <text class="field-label">结束时间</text>
-                    <input class="input" type="text" placeholder="08:45" placeholder-class="input-placeholder"
-                           value="{{form.end_time}}" data-field="end_time" bindinput="onFieldInput"
-                           bindblur="onTimeBlur" maxlength="8" />
+                    <picker mode="multiSelector" range="{{timeRange}}" value="{{endParts}}"
+                            data-field="end_time" data-which="end"
+                            bindchange="onTimeChange" bindcolumnchange="onTimeColumnChange">
+                        <view class="picker-value time-picker-value">
+                            <text class="time-part">{{endHour}}</text><text class="time-unit">时</text>
+                            <text class="time-colon">:</text>
+                            <text class="time-part">{{endMinute}}</text><text class="time-unit">分</text>
+                            <text class="picker-arrow">›</text>
+                        </view>
+                    </picker>
                 </view>
             </view>
+            <text class="time-hint">左右两列分别选小时和分钟，选好自动组成 08:00 这样的时间</text>
 
             <view class="field">
                 <text class="field-label">重复周次</text>
@@ -132,7 +149,7 @@
             <view wx:if="{{errorText}}" class="save-error">{{errorText}}</view>
             <view class="bottom-bar row">
                 <button class="plain-btn bar-cancel" bindtap="goBack">取消</button>
-                <button class="primary-btn grow" loading="{{saving}}" disabled="{{saving}}" bindtap="save">保存到云端</button>
+                <button class="primary-btn grow" loading="{{saving}}" disabled="{{saving}}" bindtap="save">保存</button>
             </view>
         </view>
     </block>

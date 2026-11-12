@@ -45,7 +45,8 @@
                                       class="course-chip"
                                       style="background:{{course.bg}};color:{{course.fg}};border-left:6rpx solid {{course.solid}}">
                                     <text class="chip-title">{{course.title}}</text>
-                                    <text class="chip-time">{{course.timeText}}</text>
+                                    <text class="chip-time">{{course.chipTimeText}}</text>
+                                    <text wx:if="{{course.chipExtraText}}" class="chip-extra">{{course.chipExtraText}}</text>
                                 </view>
                             </block>
                             <view wx:else class="cell-add"><text>＋</text></view>

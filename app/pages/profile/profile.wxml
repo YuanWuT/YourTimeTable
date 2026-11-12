@@ -29,17 +29,20 @@
         </view>
 
         <view class="stats-card">
-            <view class="stat-item">
+            <view class="stat-item" data-key="courses" bindtap="onStatTap" hover-class="stat-item-hover">
                 <text class="stat-number">{{courseCount}}</text>
                 <text class="stat-label">课程</text>
+                <text class="stat-more">查看 ›</text>
             </view>
-            <view class="stat-item">
+            <view class="stat-item" data-key="periods" bindtap="onStatTap" hover-class="stat-item-hover">
                 <text class="stat-number">{{periodCount}}</text>
                 <text class="stat-label">作息节次</text>
+                <text class="stat-more">查看 ›</text>
             </view>
-            <view class="stat-item">
+            <view class="stat-item" data-key="imports" bindtap="onStatTap" hover-class="stat-item-hover">
                 <text class="stat-number">{{importCount}}</text>
                 <text class="stat-label">导入记录</text>
+                <text class="stat-more">查看 ›</text>
             </view>
         </view>
 
@@ -59,7 +62,7 @@
         <view class="card menu-card">
             <view class="menu-item" bindtap="goSettings">
                 <text class="menu-icon">⏰</text>
-                <text class="grow">作息时间、开学日期与提醒</text>
+                <text class="grow">作息节次调整、开学日期及提醒</text>
                 <text class="menu-arrow">›</text>
             </view>
             <view class="menu-item" bindtap="goImport">

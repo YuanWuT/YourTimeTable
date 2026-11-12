@@ -1,14 +1,14 @@
 // 课程表导入：拍照/相册图片经多模态模型识别、自由文本经模型解析、Excel(.xlsx)/CSV 本地解析。
 // 解析结果统一归一化成课程对象，交给导入页确认后再批量写入云端。
 const { cloud } = require('./cloud');
-const { COURSE_COLORS } = require('./config');
+const { COURSE_COLORS, NOTE_MAX_LENGTH } = require('./config');
 const { DEFAULT_PERIODS, timeToMinutes, normalizePeriods } = require('./schedule');
 
 const SYSTEM_PROMPT = [
     '你是中文课程表信息抽取助手。把用户提供的课程表转换成 JSON，只输出 JSON，不要解释、不要 Markdown 代码块。',
     '输出格式固定为对象 {"courses":[ ... ]}。courses 每项字段：title(课程名,必填)、teacher(教师)、location(地点)、',
     'day_of_week(整数1-7，1=周一,7=周日)、period_no(整数，第几节课，从 1 开始)、start_time(HH:MM)、end_time(HH:MM)、',
-    'week_type(只允许 all/odd/even，代表每周/仅单周/仅双周)、note(备注)。',
+    'week_type(只允许 all/odd/even，代表每周/仅单周/仅双周)、note(备注，最多 20 字，没有就留空)。',
     '规则：一节课只输出一条记录；不要臆造不存在的课程；课程名不要带节次编号或时间；',
     '「单周/双周」标记写入 week_type；同一格里的地点写进 location。',
     '识别不到信息的字段填空字符串或默认值：day_of_week 默认 1，week_type 默认 all。',
@@ -138,7 +138,7 @@ function normalizeCourse(raw, periods) {
         end_time: end,
         week_type: weekType,
         color: colorFor(title),
-        note: trimText(item.note || item.remark || '', 200),
+        note: trimText(item.note || item.remark || '', NOTE_MAX_LENGTH),
         remind: true,
         lead_minutes: 15,
     };

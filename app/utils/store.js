@@ -3,6 +3,7 @@
 const { cloud } = require('./cloud');
 const { createTableAccess } = require('./workbuddy-data-access');
 const { DEFAULT_PERIODS, defaultTermStart, sortCourses, normalizePeriods } = require('./schedule');
+const { NOTE_MAX_LENGTH } = require('./config');
 
 const COURSE_COLUMNS = [
     'id', 'title', 'teacher', 'location', 'day_of_week', 'period_no',
@@ -52,7 +53,7 @@ function courseToRow(course) {
     if (c.end_time !== undefined) row.end_time = text(c.end_time, '08:45', 10);
     if (c.week_type !== undefined) row.week_type = WEEK_TYPES.indexOf(c.week_type) >= 0 ? c.week_type : 'all';
     if (c.color !== undefined) row.color = COLOR_KEYS.indexOf(c.color) >= 0 ? c.color : 'blue';
-    if (c.note !== undefined) row.note = text(c.note, '', 300);
+    if (c.note !== undefined) row.note = text(c.note, '', NOTE_MAX_LENGTH);
     if (c.remind !== undefined) row.remind = Boolean(c.remind);
     if (c.lead_minutes !== undefined) row.lead_minutes = int(c.lead_minutes, 0, 180, 15);
     if (c.role !== undefined) row.role = ROLE_KEYS.indexOf(c.role) >= 0 ? c.role : 'student';

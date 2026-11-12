@@ -87,13 +87,29 @@
             <view class="format-block">
                 <text class="format-label">方式一 · 一行一节课</text>
                 <text class="format-text">表头包含：课程名称、星期、开始时间、结束时间、地点、教师、单双周（可选）</text>
+                <view class="template-link" data-format="single" bindtap="downloadTemplate" hover-class="template-link-hover">
+                    <text class="template-icon">⬇</text>
+                    <view class="grow">
+                        <text class="template-title">下载 Excel 模板（.xlsx）</text>
+                        <text class="template-desc">已带表头与 2 行示例，替换或删掉示例行即可填写</text>
+                    </view>
+                    <text class="template-arrow">›</text>
+                </view>
             </view>
             <view class="format-block">
                 <text class="format-label">方式二 · 常见课表矩阵</text>
                 <text class="format-text">第一列为时间段（如 08:00-08:45），表头为周一 ~ 周日，单元格写课程名，可用换行附上地点和老师</text>
+                <view class="template-link" data-format="matrix" bindtap="downloadTemplate" hover-class="template-link-hover">
+                    <text class="template-icon">⬇</text>
+                    <view class="grow">
+                        <text class="template-title">下载课表矩阵模板（.xlsx）</text>
+                        <text class="template-desc">时间段 + 周一至周日列，直接在格子里写课名</text>
+                    </view>
+                    <text class="template-arrow">›</text>
+                </view>
             </view>
-            <text class="format-note">支持 .xlsx 与 UTF-8 编码的 .csv；旧版 .xls 请先另存为 .xlsx。文件需先发送到微信聊天记录，再在这里选择。</text>
-            <text class="format-note">单双周标记可以写在课程名里，例如「大学英语（单周）」。</text>
+            <text class="format-note">点模板会把 .xlsx 发送到微信聊天，用 Excel / WPS 打开填写；填好后再发回微信，点上方「Excel / CSV 表格」选择导入。模板里的示例行记得替换或删除。</text>
+            <text class="format-note">支持 .xlsx 与 UTF-8 编码的 .csv；旧版 .xls 请先另存为 .xlsx。单双周标记可以写在课程名里，例如「大学英语（单周）」。</text>
         </view>
 
         <view class="settings-link" bindtap="goGrid">
@@ -105,7 +121,7 @@
             <text>›</text>
         </view>
         <view class="settings-link" bindtap="goSettings">
-            <text>作息时间、开学日期与提醒设置</text>
+            <text>作息节次调整、开学日期及提醒设置</text>
             <text>›</text>
         </view>
     </block>

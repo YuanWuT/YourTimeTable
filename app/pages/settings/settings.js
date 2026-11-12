@@ -25,6 +25,11 @@ Page({
         periodCountIndex: 3,
     },
 
+    onLoad(options) {
+        // 从「我的」页点作息节次统计进来时，直接定位到作息节次卡片
+        this.focusPeriods = Boolean(options && options.focus === 'periods');
+    },
+
     onShow() {
         this.restore();
     },
@@ -82,6 +87,14 @@ Page({
             courseCount: courses.length,
             periodCountIndex: Math.max(0, PERIOD_COUNT_OPTIONS.indexOf(periods.length)),
         });
+        if (this.focusPeriods) {
+            this.focusPeriods = false;
+            setTimeout(() => {
+                if (typeof wx.pageScrollTo === 'function') {
+                    wx.pageScrollTo({ selector: '#periods-card', duration: 300 });
+                }
+            }, 120);
+        }
     },
 
     async saveSettings(patch) {

@@ -1,5 +1,6 @@
 const store = require('../../utils/store');
 const importer = require('../../utils/importer');
+const template = require('../../utils/template');
 const S = require('../../utils/schedule');
 
 const ENTRIES = [
@@ -332,6 +333,59 @@ Page({
 
     goSettings() {
         wx.navigateTo({ url: '/pages/settings/settings' });
+    },
+
+    // 下载 Excel 导入模板：本地生成一个真 .xlsx，再交给微信保存到聊天。
+    // 小程序不能直接把文件写到手机「下载目录」，标准做法是转发到聊天后用 Excel / WPS 打开。
+    downloadTemplate(event) {
+        const format = (event.currentTarget.dataset && event.currentTarget.dataset.format) || 'single';
+        const config = template.FORMATS[format] || template.FORMATS.single;
+        try {
+            const buffer = template.buildXlsxTemplate(format);
+            const base = (wx.env && wx.env.USER_DATA_PATH) || 'wxfile://usr';
+            const filePath = base + '/' + config.fileName;
+            wx.getFileSystemManager().writeFileSync(filePath, buffer);
+            if (typeof wx.shareFileMessage === 'function') {
+                wx.shareFileMessage({
+                    filePath: filePath,
+                    fileName: config.fileName,
+                    success: () => wx.showToast({ title: '模板已发送到聊天', icon: 'success' }),
+                    fail: (error) => {
+                        // 用户主动取消转发就不要再弹预览，避免打扰
+                        if (error && /cancel/i.test(String(error.errMsg || ''))) return;
+                        this.openTemplateFile(filePath);
+                    },
+                });
+            } else {
+                this.openTemplateFile(filePath);
+            }
+        } catch (error) {
+            this.templateHint((error && error.message) || '当前环境不支持写入文件');
+        }
+    },
+
+    openTemplateFile(filePath) {
+        if (typeof wx.openDocument === 'function') {
+            wx.openDocument({
+                filePath: filePath,
+                fileType: 'xlsx',
+                showMenu: true,
+                fail: () => this.templateHint('当前环境无法直接预览文件'),
+            });
+            return;
+        }
+        this.templateHint('当前环境不支持文件转发');
+    },
+
+    templateHint(reason) {
+        wx.showModal({
+            title: 'Excel 模板下载',
+            content: (reason ? reason + '。\n\n' : '')
+                + '请在微信客户端里点「下载 Excel 模板」：文件会发送到微信聊天，用 Excel / WPS 打开填写，再发回微信，然后从上方「Excel / CSV 表格」选择导入。\n\n'
+                + '表头：' + template.SINGLE_HEADERS.join('、'),
+            showCancel: false,
+            confirmText: '我知道了',
+        });
     },
 
     noop() {},

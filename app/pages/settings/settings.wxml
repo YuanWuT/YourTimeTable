@@ -26,7 +26,7 @@
             </view>
         </view>
 
-        <view class="card">
+        <view id="periods-card" class="card">
             <view class="row-between">
                 <text class="section-title">作息节次</text>
                 <text class="link-text" bindtap="resetPeriods">恢复默认</text>

@@ -1,0 +1,106 @@
+.imports-page {
+    padding-top: 24rpx;
+}
+
+.error-card {
+    padding: 24rpx 26rpx;
+    margin-bottom: 20rpx;
+    background: #fff3f1;
+    border: 2rpx solid #ffd9d2;
+    border-radius: 20rpx;
+}
+
+.error-desc {
+    font-size: 26rpx;
+    color: #b94c37;
+    line-height: 1.6;
+}
+
+.retry-btn {
+    margin-top: 18rpx;
+    width: 180rpx;
+}
+
+.empty-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 64rpx 32rpx;
+    margin-bottom: 24rpx;
+    background: #ffffff;
+    border: 2rpx solid #e8ecf3;
+    border-radius: 24rpx;
+}
+
+.empty-title {
+    font-size: 29rpx;
+    font-weight: 600;
+    color: #1b2437;
+}
+
+.empty-desc {
+    margin-top: 10rpx;
+    font-size: 23rpx;
+    color: #8a94a6;
+    line-height: 1.6;
+    text-align: center;
+}
+
+.import-item {
+    padding: 22rpx 24rpx;
+}
+
+.import-icon {
+    font-size: 36rpx;
+    margin-right: 18rpx;
+    flex: none;
+}
+
+.import-title {
+    display: block;
+    font-size: 28rpx;
+    font-weight: 600;
+    color: #1b2437;
+}
+
+.import-meta {
+    display: block;
+    margin-top: 6rpx;
+    font-size: 22rpx;
+    color: #8a94a6;
+}
+
+.import-count {
+    flex: none;
+    font-size: 24rpx;
+    font-weight: 600;
+    color: #2f6bed;
+    background: #eaf1ff;
+    padding: 6rpx 16rpx;
+    border-radius: 999rpx;
+}
+
+.import-file {
+    display: block;
+    margin-top: 14rpx;
+    font-size: 23rpx;
+    color: #5a6478;
+    word-break: break-all;
+}
+
+.import-cloud {
+    display: inline-block;
+    margin-top: 12rpx;
+    font-size: 20rpx;
+    color: #2f6bed;
+}
+
+.imports-footer {
+    display: flex;
+    margin-top: 12rpx;
+}
+
+.imports-footer button {
+    flex: 1;
+    margin: 0 8rpx;
+}

@@ -1,6 +1,6 @@
 // 课程表领域计算：日期、周次、单双周、网格/月历数据、课程展示样式。
 // 所有复杂计算都放在 JS 里完成，WXML 只做简单渲染（小程序模板不支持函数与可选链）。
-const { COURSE_COLORS } = require('./config');
+const { COURSE_COLORS, NOTE_MAX_LENGTH } = require('./config');
 
 const DAY_NAMES = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 const MONTH_HEADS = ['一', '二', '三', '四', '五', '六', '日'];
@@ -135,19 +135,34 @@ function colorOf(key) {
     return COURSE_COLORS.find(item => item.key === key) || COURSE_COLORS[0];
 }
 
+// 课表格子很窄，老师 / 备注必须压成一行显示；超长内容用省略号收尾。
+function clipText(value, limit) {
+    const text = String(value === undefined || value === null ? '' : value)
+        .replace(/\s+/g, ' ')
+        .trim();
+    return text.length > limit ? text.slice(0, limit) + '…' : text;
+}
+
 // 给课程补上模板可直接使用的展示字段
 function styleCourse(course) {
     const palette = colorOf(course.color);
     const start = String(course.start_time || '').trim();
     const end = String(course.end_time || '').trim();
+    const teacher = course.teacher || '';
+    const note = clipText(course.note, NOTE_MAX_LENGTH);
+    const weekText = weekTypeLabel(course.week_type);
     return Object.assign({}, course, {
         bg: palette.bg,
         fg: palette.fg,
         solid: palette.solid,
         timeText: start + (end ? '–' + end : ''),
-        weekText: weekTypeLabel(course.week_type),
+        weekText: weekText,
         locationText: course.location || '未填地点',
-        teacherText: course.teacher || '',
+        teacherText: teacher,
+        noteText: note,
+        // 网格格子用一行紧凑文本：老师 + 备注，避免多占一行导致溢出
+        chipExtraText: clipText([clipText(teacher, 8), clipText(note, 10)].filter(Boolean).join(' · '), 20),
+        chipTimeText: start + (end ? '–' + end : '') + (weekText !== '每周' ? ' · ' + weekText : ''),
         dayText: DAY_NAMES[(Number(course.day_of_week) || 1) - 1] || '周一',
     });
 }
@@ -312,6 +327,7 @@ module.exports = {
     timeToMinutes,
     isValidTime,
     normalizeTime,
+    clipText,
     sortCourses,
     colorOf,
     styleCourse,

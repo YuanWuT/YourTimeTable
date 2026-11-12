@@ -1,4 +1,4 @@
-const { COURSE_COLORS } = require('../../utils/config');
+const { COURSE_COLORS, NOTE_MAX_LENGTH } = require('../../utils/config');
 const store = require('../../utils/store');
 const S = require('../../utils/schedule');
 
@@ -8,6 +8,34 @@ const WEEK_TYPES = [
     { key: 'odd', name: '仅单周' },
     { key: 'even', name: '仅双周' },
 ];
+
+// 时间按「小时 / 分钟」两列选择，不再要求用户手工输入冒号。
+const HOURS = [];
+const MINUTES = [];
+for (let h = 0; h < 24; h += 1) HOURS.push(S.pad2(h));
+for (let m = 0; m < 60; m += 1) MINUTES.push(S.pad2(m));
+const TIME_RANGE = [HOURS, MINUTES];
+
+function timeParts(value) {
+    const normalized = S.normalizeTime(value) || '08:00';
+    const pieces = normalized.split(':');
+    return [Number(pieces[0]), Number(pieces[1])];
+}
+
+// 表单时间变化后同步 picker 的选中位置与展示文本（WXML 里不做复杂运算）。
+function timeState(form) {
+    const start = timeParts(form.start_time);
+    const end = timeParts(form.end_time);
+    return {
+        startParts: start,
+        endParts: end,
+        startHour: HOURS[start[0]],
+        startMinute: MINUTES[start[1]],
+        endHour: HOURS[end[0]],
+        endMinute: MINUTES[end[1]],
+        noteLength: String(form.note || '').length,
+    };
+}
 
 function emptyForm() {
     const day = S.dayOfWeek(new Date());
@@ -47,6 +75,17 @@ Page({
         leadLabels: LEAD_OPTIONS.map(value => value === 0 ? '上课时提醒' : '提前 ' + value + ' 分钟'),
         leadIndex: 3,
         deletedCount: 0,
+        noteMax: NOTE_MAX_LENGTH,
+        noteLength: 0,
+        hours: HOURS,
+        minutes: MINUTES,
+        timeRange: TIME_RANGE,
+        startParts: [8, 0],
+        endParts: [8, 45],
+        startHour: '08',
+        startMinute: '00',
+        endHour: '08',
+        endMinute: '45',
     },
 
     onLoad(options) {
@@ -120,10 +159,12 @@ Page({
             }
         }
         const leadIndex = Math.max(0, LEAD_OPTIONS.indexOf(Number(form.lead_minutes)));
+        // 历史数据里可能有更长的备注，编辑时也统一收到上限，避免课表格子被撑乱。
+        form.note = String(form.note || '').slice(0, NOTE_MAX_LENGTH);
         const colors = COURSE_COLORS.map(item => Object.assign({}, item, { selected: item.key === form.color }));
         const weekTypes = WEEK_TYPES.map(item => Object.assign({}, item, { selected: item.key === form.week_type }));
         const foundIndex = periods.findIndex(item => Number(item.sort_no) === Number(form.period_no));
-        this.setData({
+        this.setData(Object.assign({
             loading: false,
             errorText: '',
             form: form,
@@ -135,16 +176,19 @@ Page({
             weekTypes: weekTypes,
             leadIndex: leadIndex,
             deletedCount: (deletedResult.data || []).length,
-        });
+        }, timeState(form)));
     },
 
     onFieldInput(event) {
         const field = event.currentTarget.dataset.field;
         if (!field) return;
+        const rawValue = event.detail.value;
+        const value = field === 'note' ? String(rawValue || '').slice(0, NOTE_MAX_LENGTH) : rawValue;
         const form = Object.assign({}, this.data.form);
-        form[field] = event.detail.value;
-        // 手动改过时间后就不再按旧节次定位，否则课表会把课程放回原来的节次行
+        form[field] = value;
         const patch = { form: form, errorText: '' };
+        if (field === 'note') patch.noteLength = String(value).length;
+        // 手动改过时间后就不再按旧节次定位，否则课表会把课程放回原来的节次行
         if ((field === 'start_time' || field === 'end_time') && this.data.periodIndex !== 0) {
             form.period_no = 0;
             patch.periodIndex = 0;
@@ -152,14 +196,33 @@ Page({
         this.setData(patch);
     },
 
-    onTimeBlur(event) {
+    // 滚动小时 / 分钟列时同步 picker 的选中位置，两列互相独立。
+    onTimeColumnChange(event) {
+        const which = event.currentTarget.dataset.which;
+        const column = Number(event.detail.column);
+        const value = Number(event.detail.value);
+        const key = which === 'end' ? 'endParts' : 'startParts';
+        const parts = (this.data[key] || [0, 0]).slice();
+        parts[column] = value;
+        const patch = {};
+        patch[key] = parts;
+        this.setData(patch);
+    },
+
+    // 选完时 / 分自动拼成 HH:MM，用户全程不用输入冒号。
+    onTimeChange(event) {
         const field = event.currentTarget.dataset.field;
         if (field !== 'start_time' && field !== 'end_time') return;
-        const normalized = S.normalizeTime(event.detail.value);
-        if (!normalized) return;
-        const form = Object.assign({}, this.data.form);
-        form[field] = normalized;
-        this.setData({ form: form });
+        const picked = event.detail.value || [0, 0];
+        const hour = Math.min(23, Math.max(0, Number(picked[0]) || 0));
+        const minute = Math.min(59, Math.max(0, Number(picked[1]) || 0));
+        const form = Object.assign({}, this.data.form, { period_no: 0 });
+        form[field] = S.pad2(hour) + ':' + S.pad2(minute);
+        this.setData(Object.assign({
+            form: form,
+            periodIndex: 0,
+            errorText: '',
+        }, timeState(form)));
     },
 
     onDayChange(event) {
@@ -172,7 +235,7 @@ Page({
         const index = Number(event.detail.value) || 0;
         if (index === 0) {
             const form = Object.assign({}, this.data.form, { period_no: 0 });
-            this.setData({ periodIndex: 0, form: form, errorText: '' });
+            this.setData(Object.assign({ periodIndex: 0, form: form, errorText: '' }, timeState(form)));
             return;
         }
         const period = this.data.periods[index - 1];
@@ -182,7 +245,7 @@ Page({
             start_time: period.start_time,
             end_time: period.end_time,
         });
-        this.setData({ periodIndex: index, form: form, errorText: '' });
+        this.setData(Object.assign({ periodIndex: index, form: form, errorText: '' }, timeState(form)));
     },
 
     onWeekType(event) {
@@ -211,8 +274,8 @@ Page({
 
     validate(form) {
         if (!String(form.title || '').trim()) return '请填写课程名称';
-        if (!S.isValidTime(form.start_time)) return '开始时间请写成 HH:MM，例如 08:00';
-        if (!S.isValidTime(form.end_time)) return '结束时间请写成 HH:MM，例如 08:45';
+        if (!S.isValidTime(form.start_time)) return '开始时间无效，请重新按小时、分钟选择';
+        if (!S.isValidTime(form.end_time)) return '结束时间无效，请重新按小时、分钟选择';
         if (S.timeToMinutes(form.end_time) <= S.timeToMinutes(form.start_time)) return '结束时间要晚于开始时间';
         return '';
     },
@@ -229,6 +292,7 @@ Page({
         const raw = this.data.form;
         const form = Object.assign({}, raw, {
             title: String(raw.title || '').trim(),
+            note: String(raw.note || '').slice(0, NOTE_MAX_LENGTH),
             start_time: S.normalizeTime(raw.start_time) || String(raw.start_time || '').trim(),
             end_time: S.normalizeTime(raw.end_time) || String(raw.end_time || '').trim(),
         });
@@ -251,7 +315,7 @@ Page({
             this.showError(result.error.message || '保存失败，请重试');
             return;
         }
-        wx.showToast({ title: '已保存到云端', icon: 'success' });
+        wx.showToast({ title: '已保存', icon: 'success' });
         setTimeout(() => wx.navigateBack(), 700);
     },
 

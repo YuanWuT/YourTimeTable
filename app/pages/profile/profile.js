@@ -114,6 +114,22 @@ Page({
         await this.load();
     },
 
+    // 三项统计都可以点开，跳到各自对应的内容页
+    onStatTap(event) {
+        const key = event.currentTarget.dataset && event.currentTarget.dataset.key;
+        if (key === 'courses') {
+            wx.navigateTo({ url: '/pages/grid/grid' });
+            return;
+        }
+        if (key === 'periods') {
+            wx.navigateTo({ url: '/pages/settings/settings?focus=periods' });
+            return;
+        }
+        if (key === 'imports') {
+            wx.navigateTo({ url: '/pages/imports/imports' });
+        }
+    },
+
     goSettings() {
         wx.navigateTo({ url: '/pages/settings/settings' });
     },
