@@ -25,6 +25,22 @@
             </view>
         </view>
 
+        <view class="batch-bar">
+            <block wx:if="{{!batchMode}}">
+                <text class="batch-hint">长按课程卡片可批量勾选</text>
+                <view class="batch-entry" bindtap="toggleBatchMode">批量删除</view>
+            </block>
+            <block wx:else>
+                <text class="batch-count">已选 {{selectedCount}} 节</text>
+                <view class="batch-actions">
+                    <text class="batch-link" bindtap="selectAllBatch">全选</text>
+                    <text class="batch-link" bindtap="exitBatchMode">取消</text>
+                    <text class="batch-danger {{selectedCount === 0 ? 'batch-disabled' : ''}}"
+                          bindtap="confirmBatchRemove">删除选中</text>
+                </view>
+            </block>
+        </view>
+
         <view class="grid-card">
             <view class="time-rail">
                 <view class="rail-head"><text>节次</text></view>
@@ -42,8 +58,12 @@
                               data-day="{{cell.day}}" data-period="{{cell.periodNo}}" bindtap="onCellTap">
                             <block wx:if="{{cell.courses.length > 0}}">
                                 <view wx:for="{{cell.courses}}" wx:for-item="course" wx:key="id"
-                                      class="course-chip"
-                                      style="background:{{course.bg}};color:{{course.fg}};border-left:6rpx solid {{course.solid}}">
+                                      class="course-chip {{course.checked ? 'course-chip-checked' : ''}}"
+                                      style="background:{{course.bg}};color:{{course.fg}};border-left:6rpx solid {{course.solid}}"
+                                      data-id="{{course.id}}" catchtap="onCourseTap" bindlongpress="onCourseLongPress">
+                                    <view wx:if="{{batchMode}}" class="chip-check {{course.checked ? 'chip-check-on' : ''}}">
+                                        <text wx:if="{{course.checked}}">✓</text>
+                                    </view>
                                     <text class="chip-title">{{course.title}}</text>
                                     <text class="chip-time">{{course.chipTimeText}}</text>
                                     <text wx:if="{{course.chipExtraText}}" class="chip-extra">{{course.chipExtraText}}</text>
@@ -56,7 +76,7 @@
             </scroll-view>
         </view>
 
-        <view class="grid-tip">共 {{courseCount}} 节课 · 左右滑动查看周一到周日 · 点空格子即可添加</view>
-        <view class="fab" bindtap="onAddFree"><text class="fab-text">＋</text></view>
+        <view class="grid-tip">{{batchMode ? '点卡片勾选或取消 · 可左右滑动继续选择' : '共 ' + courseCount + ' 节课 · 点空格子添加、长按课程批量管理'}}</view>
+        <view wx:if="{{!batchMode}}" class="fab" bindtap="onAddFree"><text class="fab-text">＋</text></view>
     </block>
 </view>

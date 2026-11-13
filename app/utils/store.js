@@ -2,7 +2,7 @@
 // 所有方法返回 { data, error }，不 reject；error 统一带可展示的 message。
 const { cloud } = require('./cloud');
 const { createTableAccess } = require('./workbuddy-data-access');
-const { DEFAULT_PERIODS, defaultTermStart, sortCourses, normalizePeriods } = require('./schedule');
+const { DEFAULT_PERIODS, defaultTermStart, sortCourses, normalizePeriods, dedupeCourses } = require('./schedule');
 const { NOTE_MAX_LENGTH } = require('./config');
 
 const COURSE_COLUMNS = [
@@ -279,6 +279,41 @@ function removeCourse(id) {
     });
 }
 
+// 批量勾选删除：一次请求软删除多条，仍然走 RLS，只影响当前用户自己的课程。
+async function removeCourses(ids) {
+    // 页面里用 String 存选中态，写回数据库前还原成数值 id，避免 bigint 与文本比较失败
+    const list = (ids || [])
+        .map(id => {
+            const n = Number(id);
+            return Number.isFinite(n) && String(n) === String(id) ? n : id;
+        })
+        .filter(id => id !== undefined && id !== null && String(id).trim() !== '');
+    if (list.length === 0) return ok(0);
+    try {
+        const stamp = new Date().toISOString();
+        const builder = cloud.database.from('courses').update({
+            deleted: true,
+            deleted_at: stamp,
+            updated_at: stamp,
+        });
+        if (typeof builder.in !== 'function') {
+            // 兼容不支持 in 过滤的旧版 SDK：逐条软删除，行为一致
+            let count = 0;
+            for (let i = 0; i < list.length; i += 1) {
+                const one = await coursesAccess.update(list[i], { deleted: true, deleted_at: stamp });
+                if (one.error) return one;
+                count += 1;
+            }
+            return ok(count);
+        }
+        const result = await builder.in('id', list).select('id');
+        if (result.error) return fail(result.error);
+        return ok((result.data || []).length);
+    } catch (error) {
+        return fail(clientError(error));
+    }
+}
+
 function restoreCourse(id) {
     return coursesAccess.update(id, { deleted: false, deleted_at: null });
 }
@@ -290,7 +325,7 @@ function purgeCourse(id) {
 async function createCoursesBatch(list) {
     try {
         const role = currentRole();
-        const rows = (list || []).map(item => {
+        const rows = dedupeCourses(list || []).map(item => {
             const source = item || {};
             return courseToRow(Object.assign({}, source, {
                 role: ROLE_KEYS.indexOf(source.role) >= 0 ? source.role : role,
@@ -397,6 +432,7 @@ module.exports = {
     createCourse,
     updateCourse,
     removeCourse,
+    removeCourses,
     restoreCourse,
     purgeCourse,
     createCoursesBatch,

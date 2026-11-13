@@ -121,6 +121,87 @@ function normalizeTime(value) {
     return pad2(h) + ':' + pad2(m);
 }
 
+// 单双周：all 覆盖所有周，因此与任何周次都可能撞课；odd 与 even 互不冲突。
+function weekTypesConflict(a, b) {
+    const x = a || 'all';
+    const y = b || 'all';
+    if (x === 'all' || y === 'all') return true;
+    return x === y;
+}
+
+// 两个时间区间是否真正相交（首尾相接不算重叠）
+function timeRangesOverlap(a, b) {
+    const as = timeToMinutes(a && a.start_time);
+    const ae = timeToMinutes(a && a.end_time);
+    const bs = timeToMinutes(b && b.start_time);
+    const be = timeToMinutes(b && b.end_time);
+    if (as < 0 || ae < 0 || bs < 0 || be < 0) return false;
+    return as < be && bs < ae;
+}
+
+// 同一天、周次会相遇、时间有交集 => 这段时间被排了两次课
+function coursesConflict(a, b) {
+    if (!a || !b) return false;
+    if (Number(a.day_of_week) !== Number(b.day_of_week)) return false;
+    if (!weekTypesConflict(a.week_type, b.week_type)) return false;
+    return timeRangesOverlap(a, b);
+}
+
+function isSameCourseSlot(a, b) {
+    return coursesConflict(a, b)
+        && String(a.title || '').trim() === String(b.title || '').trim();
+}
+
+function findConflicts(candidate, list, excludeId) {
+    return (list || []).filter(course => {
+        if (excludeId !== undefined && excludeId !== null && String(course.id) === String(excludeId)) return false;
+        return coursesConflict(candidate, course);
+    });
+}
+
+function conflictLabel(course) {
+    return '「' + (course.title || '课程') + '」' + (course.start_time || '') + '–' + (course.end_time || '');
+}
+
+// 同名 + 同天 + 时间有交集 + 周次会相遇 => 视为同一节课被重复录入，只保留第一条。
+// 用于导入前去重、周视图显示层兜底，避免一个格子里叠两张卡片看起来像「一节课变两节」。
+function dedupeCourses(list) {
+    const result = [];
+    (list || []).forEach(course => {
+        if (!course) return;
+        const duplicate = result.some(kept => isSameCourseSlot(kept, course));
+        if (!duplicate) result.push(course);
+    });
+    return result;
+}
+
+// 自定义时间若与某个作息节次几乎一致（如 08:40 / 10:29），收敛到该节次，
+// 避免相邻节次时间「擦边」造成重叠、错位与重复课程。连堂课（结束时间差得远）不动。
+function snapCourseToPeriods(course, periods, tolerance) {
+    const tol = tolerance === undefined ? 12 : tolerance;
+    const slots = normalizePeriods(periods);
+    const source = course || {};
+    const start = timeToMinutes(source.start_time);
+    const end = timeToMinutes(source.end_time);
+    if (start < 0 || slots.length === 0) return source;
+    let best = null;
+    let distance = Infinity;
+    slots.forEach((slot) => {
+        const d = Math.abs(timeToMinutes(slot.start_time) - start);
+        if (d < distance) {
+            distance = d;
+            best = slot;
+        }
+    });
+    if (!best || distance > tol) return source;
+    if (end >= 0 && Math.abs(timeToMinutes(best.end_time) - end) > tol) return source;
+    return Object.assign({}, source, {
+        period_no: best.sort_no,
+        start_time: best.start_time,
+        end_time: best.end_time,
+    });
+}
+
 function sortCourses(list) {
     return list.slice().sort((a, b) => {
         if (a.day_of_week !== b.day_of_week) return a.day_of_week - b.day_of_week;
@@ -221,11 +302,11 @@ function buildWeekColumns(courses, periods, monday, parity, todayKey) {
             endTime: slot.end_time,
             courses: [],
         }));
-        const matched = [];
-        source.forEach((course) => {
-            if (Number(course.day_of_week) !== day) return;
-            if (!courseVisible(course, parity)) return;
-            matched.push(course);
+        // 同一时段被重复录入的同一门课只显示一次；单周 / 双周不同课仍可并列
+        const matched = dedupeCourses(source.filter(course => (
+            Number(course.day_of_week) === day && courseVisible(course, parity)
+        )));
+        matched.forEach((course) => {
             const index = slotIndexFor(course, slots);
             cells[index].courses.push(course);
         });
@@ -256,7 +337,7 @@ function buildMonthCells(year, month, courses, termStart, todayKey, mode) {
         const inMonth = date.getMonth() === month - 1 && date.getFullYear() === year;
         const parity = mode === 'all' ? 'all' : parityOf(date, termStart);
         const day = dayOfWeek(date);
-        const list = source.filter(c => Number(c.day_of_week) === day && courseVisible(c, parity));
+        const list = dedupeCourses(source.filter(c => Number(c.day_of_week) === day && courseVisible(c, parity)));
         cells.push({
             key: key,
             dayNumber: date.getDate(),
@@ -280,7 +361,7 @@ function nextClass(courses, termStart) {
         const date = addDays(now, step);
         const day = dayOfWeek(date);
         const parity = parityOf(date, termStart);
-        const list = source.filter(c => Number(c.day_of_week) === day && courseVisible(c, parity));
+        const list = dedupeCourses(source.filter(c => Number(c.day_of_week) === day && courseVisible(c, parity)));
         for (let i = 0; i < list.length; i += 1) {
             const start = timeToMinutes(list[i].start_time);
             if (step === 0 && start <= nowMinutes) continue;
@@ -327,6 +408,14 @@ module.exports = {
     timeToMinutes,
     isValidTime,
     normalizeTime,
+    weekTypesConflict,
+    timeRangesOverlap,
+    coursesConflict,
+    isSameCourseSlot,
+    findConflicts,
+    conflictLabel,
+    dedupeCourses,
+    snapCourseToPeriods,
     clipText,
     sortCourses,
     colorOf,

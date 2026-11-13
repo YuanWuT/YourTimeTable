@@ -301,12 +301,41 @@ Page({
             this.showError(message);
             return;
         }
-        this.setData({ form: form, saving: true, errorText: '' });
+        // 与作息节次只差几分钟的零碎时间（08:40 / 10:29）会擦到相邻节次，
+        // 保存前收敛到该节次的标准时间，避免同一时段被算成两节课。
+        const finalForm = S.snapCourseToPeriods(form, this.data.periods);
+        const aligned = finalForm.start_time !== form.start_time || finalForm.end_time !== form.end_time;
+        // 录入侧限制：同一天、周次会相遇、时间有交集的课程不允许再排一节。
+        const existing = await store.listCourses();
+        if (existing.error) {
+            this.showError(existing.error.message || '无法核对已有课程，请稍后重试');
+            return;
+        }
+        const existingList = existing.data || [];
+        const original = this.courseId
+            ? existingList.find(item => String(item.id) === String(this.courseId))
+            : null;
+        // 只改标题 / 地点 / 备注时不检查；时间确实变了才检查「新造成的」重叠。
+        // 历史数据里本来就有重叠的课程，编辑时不应被拦到保存不了。
+        const timeChanged = !original
+            || original.day_of_week !== finalForm.day_of_week
+            || original.week_type !== finalForm.week_type
+            || original.start_time !== finalForm.start_time
+            || original.end_time !== finalForm.end_time;
+        let conflicts = timeChanged ? S.findConflicts(finalForm, existingList, this.courseId) : [];
+        if (original) {
+            conflicts = conflicts.filter(course => !S.coursesConflict(original, course));
+        }
+        if (conflicts.length > 0) {
+            this.showError('与' + S.conflictLabel(conflicts[0]) + '时间重叠，请调整上课时间或先删除原课程');
+            return;
+        }
+        this.setData({ form: finalForm, saving: true, errorText: '' });
         let result;
         try {
             result = this.courseId
-                ? await store.updateCourse(this.courseId, form)
-                : await store.createCourse(form);
+                ? await store.updateCourse(this.courseId, finalForm)
+                : await store.createCourse(finalForm);
         } catch (error) {
             result = { error: { message: (error && error.message) || '保存失败，请重试' } };
         }
@@ -315,7 +344,7 @@ Page({
             this.showError(result.error.message || '保存失败，请重试');
             return;
         }
-        wx.showToast({ title: '已保存', icon: 'success' });
+        wx.showToast({ title: aligned ? '已保存，时间已按作息对齐' : '已保存', icon: 'success' });
         setTimeout(() => wx.navigateBack(), 700);
     },
 

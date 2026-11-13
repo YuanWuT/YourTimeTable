@@ -46,6 +46,10 @@ Page({
         selectedDayCourses: [],
         showRolePicker: false,
         roleOptions: [],
+        batchMode: false,
+        selectedIds: [],
+        selectedCount: 0,
+        batchBusy: false,
     },
 
     onLoad() {
@@ -53,6 +57,7 @@ Page({
         this.settings = null;
         this.courses = [];
         this.periods = [];
+        this.selectedIds = [];
         this.setData({ monthYear: now.getFullYear(), monthMonth: now.getMonth() + 1 });
     },
 
@@ -112,6 +117,8 @@ Page({
         this.settings = settingsResult.data;
         this.periods = results[0].data || [];
         this.courses = results[1].data || [];
+        // 身份 / 数据刷新后清空勾选，避免选中了另一个身份的课程
+        this.selectedIds = [];
         getApp().globalData.settings = this.settings;
         getApp().globalData.periods = this.periods;
         getApp().globalData.courses = this.courses;
@@ -123,6 +130,9 @@ Page({
             role: settings.role,
             weekOffsetNum: 0,
             parityMode: todayParity,
+            batchMode: false,
+            selectedIds: [],
+            selectedCount: 0,
         }, () => this.recompute());
     },
 
@@ -154,6 +164,19 @@ Page({
     onSignedIn() {
         getApp().resetSession();
         this.setData({ demoMode: false }, () => this.restore());
+    },
+
+    // 把勾选状态合并进网格数据，WXML 只做简单渲染
+    withSelection(columns) {
+        const chosen = {};
+        (this.selectedIds || []).forEach(id => { chosen[String(id)] = true; });
+        return (columns || []).map(col => Object.assign({}, col, {
+            cells: (col.cells || []).map(cell => Object.assign({}, cell, {
+                courses: (cell.courses || []).map(course => Object.assign({}, course, {
+                    checked: Boolean(chosen[String(course.id)]),
+                })),
+            })),
+        }));
     },
 
     recompute() {
@@ -190,7 +213,7 @@ Page({
             weekLabel: '第 ' + S.weekNumber(monday, settings.term_start) + ' 周 · ' + S.parityLabel(actualParity),
             dateRange: (monday.getMonth() + 1) + '月' + monday.getDate() + '日 – ' + (sunday.getMonth() + 1) + '月' + sunday.getDate() + '日',
             parityMode: mode,
-            weekColumns: grid.columns,
+            weekColumns: this.withSelection(grid.columns),
             timeRail: grid.slots,
             weekTotal: grid.total,
             courseCount: courses.length,
@@ -301,7 +324,98 @@ Page({
         await this.loadAll();
     },
 
+    canManage() {
+        if (this.data.demoMode || this.data.authState !== 'signed-in') {
+            wx.showToast({ title: '登录后即可管理课程', icon: 'none' });
+            return false;
+        }
+        return true;
+    },
+
+    toggleBatchMode() {
+        if (!this.canManage()) return;
+        if ((this.courses || []).length === 0) {
+            wx.showToast({ title: '还没有课程可以勾选', icon: 'none' });
+            return;
+        }
+        this.selectedIds = [];
+        this.setData({ batchMode: true, selectedIds: [], selectedCount: 0 }, () => this.recompute());
+    },
+
+    exitBatchMode() {
+        this.selectedIds = [];
+        this.setData({ batchMode: false, selectedIds: [], selectedCount: 0 }, () => this.recompute());
+    },
+
+    toggleSelectAt(id) {
+        const key = String(id);
+        const list = (this.selectedIds || []).slice();
+        const index = list.indexOf(key);
+        if (index >= 0) list.splice(index, 1);
+        else list.push(key);
+        this.selectedIds = list;
+        this.setData({ selectedIds: list, selectedCount: list.length }, () => this.recompute());
+    },
+
+    onCourseLongPress(event) {
+        if (!this.canManage()) return;
+        const id = event.currentTarget.dataset.id;
+        if (!this.data.batchMode) {
+            this.selectedIds = [];
+            this.setData({ batchMode: true, selectedCount: 0 }, () => this.toggleSelectAt(id));
+            return;
+        }
+        this.toggleSelectAt(id);
+    },
+
+    selectAllBatch() {
+        const all = (this.courses || []).map(course => String(course.id));
+        const chosen = this.selectedIds || [];
+        const allSelected = all.length > 0 && all.every(id => chosen.indexOf(id) >= 0);
+        this.selectedIds = allSelected ? [] : all;
+        this.setData({
+            selectedIds: this.selectedIds,
+            selectedCount: this.selectedIds.length,
+        }, () => this.recompute());
+    },
+
+    async confirmBatchRemove() {
+        const ids = (this.selectedIds || []).slice();
+        if (ids.length === 0 || this.data.batchBusy) return;
+        const confirmed = await new Promise((resolve) => {
+            wx.showModal({
+                title: '删除选中的 ' + ids.length + ' 节课？',
+                content: '会移到「已删除的课程」，随时可以恢复，不用重新录入。',
+                confirmText: '删除',
+                confirmColor: '#d95050',
+                success: res => resolve(Boolean(res.confirm)),
+                fail: () => resolve(false),
+            });
+        });
+        if (!confirmed) return;
+        this.setData({ batchBusy: true });
+        let result;
+        try {
+            result = await store.removeCourses(ids);
+        } catch (error) {
+            result = { error: { message: (error && error.message) || '删除失败，请重试' } };
+        }
+        this.setData({ batchBusy: false });
+        if (result.error) {
+            wx.showToast({ title: result.error.message || '删除失败', icon: 'none' });
+            return;
+        }
+        wx.showToast({ title: '已删除 ' + ids.length + ' 节', icon: 'success' });
+        this.selectedIds = [];
+        this.setData({ batchMode: false, selectedIds: [], selectedCount: 0 });
+        await this.loadAll();
+    },
+
     onCourseTap(event) {
+        if (this.data.batchMode) {
+            this.toggleSelectAt(event.currentTarget.dataset.id);
+            return;
+        }
         if (this.data.demoMode || this.data.authState !== 'signed-in') {
             wx.showToast({ title: '登录后即可编辑课程', icon: 'none' });
             return;
@@ -311,6 +425,7 @@ Page({
     },
 
     onCellTap(event) {
+        if (this.data.batchMode) return;
         if (this.data.demoMode || this.data.authState !== 'signed-in') {
             wx.showToast({ title: '登录后即可添加课程', icon: 'none' });
             return;

@@ -10,6 +10,43 @@ const ENTRIES = [
     { key: 'text', icon: '📋', title: '粘贴文字', desc: '把课表文字粘贴进来自动整理', tag: 'AI 整理' },
 ];
 
+// 微信底层失败信息形如 "chooseMessageFile:fail cancel"，不能直接展示给用户。
+// 统一翻译成中文，并把「用户主动取消」单独标记，避免当成故障反复弹卡片。
+function friendlyPickError(raw, fallback) {
+    const source = String(raw || '').trim();
+    if (!source) return fallback || '操作未完成，请重试';
+    if (/cancel/i.test(source)) return '用户未上传，可重新选择';
+    if (/chooseMessageFile|chooseMedia|chooseImage/i.test(source)) {
+        return '选择未完成，请重新选择文件后再试';
+    }
+    if (/auth|deny|permission|authorize/i.test(source)) {
+        return '还没有获得文件或相册权限，请在微信设置里允许后重试';
+    }
+    if (/not support|not exist|no such/i.test(source)) return '当前环境不支持该操作，请在微信客户端内使用';
+    // 兜底：任何形如 xxx:fail xxx 的英文系统错误都不外泄
+    if (/^[\w.]+\s*:\s*fail/i.test(source) || /^[a-zA-Z\s:._-]+$/.test(source)) {
+        return fallback || '操作未完成，请重试';
+    }
+    return source;
+}
+
+function cancelledError(message) {
+    const error = new Error(message);
+    error.cancelled = true;
+    return error;
+}
+
+function pickerFail(reject, fallback) {
+    return (error) => {
+        const raw = (error && error.errMsg) || '';
+        if (/cancel/i.test(String(raw))) {
+            reject(cancelledError(fallback === 'image' ? '未选择图片，可重新选择' : '用户未上传，可重新选择'));
+            return;
+        }
+        reject(new Error(friendlyPickError(raw, fallback === 'image' ? '选择图片失败，请重试' : '选择文件失败，请重试')));
+    };
+}
+
 function pickImage() {
     return new Promise((resolve, reject) => {
         if (typeof wx.chooseMedia === 'function') {
@@ -23,7 +60,7 @@ function pickImage() {
                     if (!file) return reject(new Error('没有选中图片'));
                     resolve({ path: file.tempFilePath, size: file.size || 0 });
                 },
-                fail(error) { reject(new Error((error && error.errMsg) || '选择图片失败')); },
+                fail: pickerFail(reject, 'image'),
             });
             return;
         }
@@ -37,7 +74,7 @@ function pickImage() {
                     if (!path) return reject(new Error('没有选中图片'));
                     resolve({ path: path, size: 0 });
                 },
-                fail(error) { reject(new Error((error && error.errMsg) || '选择图片失败')); },
+                fail: pickerFail(reject, 'image'),
             });
             return;
         }
@@ -60,7 +97,7 @@ function pickFile() {
                 if (!file) return reject(new Error('没有选中文件'));
                 resolve({ path: file.path, name: file.name || 'import.xlsx', size: file.size || 0 });
             },
-            fail(error) { reject(new Error((error && error.errMsg) || '选择文件失败')); },
+            fail: pickerFail(reject, 'file'),
         });
     });
 }
@@ -95,7 +132,14 @@ Page({
         storagePath: '',
     },
 
+    onLoad() {
+        // 「未上传」轻提示在整个页面实例里只出现一次，再次返回不再重复打扰
+        this.cancelToastShown = false;
+    },
+
     onShow() {
+        // 返回本页时清掉上一次的错误卡片，避免反复看到同一条提示
+        this.setData({ errorText: '' });
         this.restore();
     },
 
@@ -132,11 +176,28 @@ Page({
     },
 
     showError(message) {
-        this.setData({ errorText: message || '操作失败，请重试', busy: false, busyText: '' });
+        this.setData({
+            errorText: friendlyPickError(message, '操作失败，请重试'),
+            busy: false,
+            busyText: '',
+        });
     },
 
     clearError() {
         this.setData({ errorText: '' });
+    },
+
+    // 用户主动取消选择不是故障：清掉 busy，只给一次轻提示，不留下错误卡片。
+    handlePickFailure(error, fallback) {
+        this.setData({ busy: false, busyText: '', errorText: '' });
+        if (error && error.cancelled) {
+            if (!this.cancelToastShown) {
+                this.cancelToastShown = true;
+                wx.showToast({ title: '用户未上传，可重新选择', icon: 'none', duration: 1800 });
+            }
+            return;
+        }
+        this.showError((error && error.message) || fallback);
     },
 
     async saveSourceRecord(source, fileName, storagePath, rowCount) {
@@ -216,7 +277,7 @@ Page({
                 await this.saveSourceRecord('photo', '课表照片.' + ext, storagePath, result.data.length);
                 this.showReview(result.data, '照片识别', '课表照片.' + ext, storagePath);
             } catch (error) {
-                this.showError((error && error.message) || '照片读取失败，请重试');
+                this.handlePickFailure(error, '照片读取失败，请重试');
             }
             return;
         }
@@ -234,7 +295,7 @@ Page({
                 await this.saveSourceRecord('excel', picked.name, storagePath, result.data.length);
                 this.showReview(result.data, '表格导入', picked.name, storagePath);
             } catch (error) {
-                this.showError((error && error.message) || '文件读取失败，请重试');
+                this.handlePickFailure(error, '文件读取失败，请重试');
             }
         }
     },
@@ -297,8 +358,50 @@ Page({
         }
         if (this.data.importing) return;
         this.setData({ importing: true, errorText: '' });
+
+        // 1) 时间先按作息节次收敛，再去掉本次结果里「同名同天同时间段」的重复项
+        const normalized = selected.map(item => S.snapCourseToPeriods(item, this.periods || []));
+        const unique = S.dedupeCourses(normalized);
+        let skipped = normalized.length - unique.length;
+
+        // 2) 与云端已有课程比对：已经导入过的同一节课直接跳过，不再写入第二份
+        const existingResult = await store.listCourses();
+        if (existingResult.error) {
+            this.setData({ importing: false });
+            this.showError(existingResult.error.message || '无法核对已有课程，请稍后重试');
+            return;
+        }
+        const existing = existingResult.data || [];
+        const fresh = unique.filter(item => !existing.some(old => S.isSameCourseSlot(old, item)));
+        skipped += unique.length - fresh.length;
+        if (fresh.length === 0) {
+            this.setData({ importing: false, reviewVisible: false, reviewCourses: [], selectedCount: 0 });
+            wx.showToast({ title: '这些课程已在课表中，无需重复导入', icon: 'none', duration: 2500 });
+            return;
+        }
+
+        // 3) 不同课程却占用同一时间段：交给用户确认，不静默覆盖
+        const clashes = fresh.filter(item => S.findConflicts(item, existing).length > 0);
+        if (clashes.length > 0) {
+            const firstClash = S.findConflicts(clashes[0], existing)[0];
+            const confirmed = await new Promise((resolve) => {
+                wx.showModal({
+                    title: '有课程时间重叠',
+                    content: '有 ' + clashes.length + ' 节课与已有课程时间重叠（如 ' + S.conflictLabel(firstClash) + '）。仍要导入吗？',
+                    confirmText: '仍然导入',
+                    cancelText: '先不导入',
+                    success: res => resolve(Boolean(res.confirm)),
+                    fail: () => resolve(false),
+                });
+            });
+            if (!confirmed) {
+                this.setData({ importing: false });
+                return;
+            }
+        }
+
         // 去掉展示用的样式字段，只提交业务字段
-        const payload = selected.map(item => ({
+        const payload = fresh.map(item => ({
             title: item.title,
             teacher: item.teacher,
             location: item.location,
@@ -318,7 +421,11 @@ Page({
             this.showError(result.error.message || '导入失败，请稍后重试');
             return;
         }
-        wx.showToast({ title: '已导入 ' + result.data.length + ' 节课', icon: 'success' });
+        wx.showToast({
+            title: '已导入 ' + result.data.length + ' 节' + (skipped > 0 ? '，跳过 ' + skipped + ' 节重复' : ''),
+            icon: 'none',
+            duration: 2200,
+        });
         this.setData({ reviewVisible: false, reviewCourses: [], selectedCount: 0, textInput: '' });
         setTimeout(() => wx.switchTab({ url: '/pages/index/index' }), 900);
     },
