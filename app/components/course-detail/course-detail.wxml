@@ -1,0 +1,50 @@
+<view wx:if="{{visible}}" class="cd-mask" bindtap="onClose"></view>
+<view wx:if="{{visible}}" class="cd-sheet" catchtap="noop">
+    <view class="cd-grab" bindtouchstart="onTouchStart" bindtouchend="onTouchEnd">
+        <view class="cd-handle"></view>
+        <view class="cd-head">
+            <view class="cd-color" style="background:{{view.solid}}"></view>
+            <view class="cd-head-text">
+                <text class="cd-title">{{view.title}}</text>
+                <text class="cd-sub">{{view.dayText}} · {{view.periodText}} · {{view.weekText}}</text>
+            </view>
+            <text class="cd-close" bindtap="onClose">✕</text>
+        </view>
+    </view>
+
+    <scroll-view scroll-y class="cd-body">
+        <view class="cd-row">
+            <text class="cd-label">上课时间</text>
+            <text class="cd-value">{{view.timeText}}</text>
+        </view>
+        <view class="cd-row">
+            <text class="cd-label">地点</text>
+            <text class="cd-value">{{view.locationText}}</text>
+        </view>
+        <view class="cd-row">
+            <text class="cd-label">老师</text>
+            <text class="cd-value">{{view.teacherText}}</text>
+        </view>
+        <view class="cd-row">
+            <text class="cd-label">课前提醒</text>
+            <text class="cd-value">{{view.remindText}}</text>
+        </view>
+        <view class="cd-row">
+            <text class="cd-label">所属身份</text>
+            <text class="cd-value">{{view.roleName}}</text>
+        </view>
+
+        <view class="cd-note">
+            <text class="cd-label">备注</text>
+            <text wx:if="{{view.hasNote}}" class="cd-note-text" user-select="{{true}}" selectable="{{true}}">{{view.note}}</text>
+            <text wx:else class="cd-note-empty">未填写备注</text>
+        </view>
+        <text class="cd-hint">备注可长按复制 · 这里只查看，不会修改课程</text>
+    </scroll-view>
+
+    <view class="cd-actions">
+        <view class="cd-btn cd-btn-danger" bindtap="onRemove">删除</view>
+        <view class="cd-btn cd-btn-ghost" bindtap="onClose">关闭</view>
+        <view class="cd-btn cd-btn-primary" bindtap="onEdit">编辑这节课</view>
+    </view>
+</view>

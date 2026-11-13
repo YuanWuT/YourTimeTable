@@ -194,7 +194,8 @@
             <text class="sheet-close" bindtap="closeDaySheet">关闭</text>
         </view>
         <scroll-view scroll-y class="sheet-list">
-            <view wx:for="{{selectedDayCourses}}" wx:key="id" class="sheet-item" style="border-left:8rpx solid {{item.solid}}">
+            <view wx:for="{{selectedDayCourses}}" wx:key="id" class="sheet-item" style="border-left:8rpx solid {{item.solid}}"
+                  data-id="{{item.id}}" bindtap="onSheetCourseTap">
                 <view class="row-between">
                     <text class="sheet-title">{{item.title}}</text>
                     <text class="sheet-time">{{item.timeText}}</text>
@@ -227,4 +228,8 @@
             <text wx:if="{{item.selected}}" class="role-option-check">✓</text>
         </view>
     </view>
+
+    <!-- 课程详情：只读查看，编辑 / 删除需要用户再点一次 -->
+    <course-detail visible="{{showCourseDetail}}" course="{{detailCourse}}" roleName="{{roleName}}"
+                   bind:close="closeCourseDetail" bind:edit="editFromDetail" bind:remove="removeFromDetail" />
 </view>

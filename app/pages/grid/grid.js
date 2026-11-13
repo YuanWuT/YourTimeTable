@@ -18,6 +18,8 @@ Page({
         selectedIds: [],
         selectedCount: 0,
         batchBusy: false,
+        showCourseDetail: false,
+        detailCourse: null,
         scrollIntoId: 'day-col-0',
         dayTabs: EMPTY_DAY_TABS,
     },
@@ -79,6 +81,8 @@ Page({
             batchMode: false,
             selectedIds: [],
             selectedCount: 0,
+            showCourseDetail: false,
+            detailCourse: null,
             dayTabs: grid.columns.map((col, index) => ({
                 index: index,
                 name: S.DAY_NAMES[index],
@@ -261,14 +265,14 @@ Page({
             return;
         }
         if (list.length === 1) {
-            this.showCourseActions(list[0]);
+            this.openCourseDetail(list[0]);
             return;
         }
         wx.showActionSheet({
             itemList: list.slice(0, 6).map(c => c.title + ' · ' + c.timeText),
             success: (res) => {
                 const picked = list[res.tapIndex];
-                if (picked) this.showCourseActions(picked);
+                if (picked) this.openCourseDetail(picked);
             },
             fail: () => {},
         });
@@ -281,21 +285,31 @@ Page({
             return;
         }
         const course = this.findCourseById(id);
-        if (course) this.showCourseActions(course);
+        if (course) this.openCourseDetail(course);
     },
 
-    showCourseActions(course) {
-        wx.showActionSheet({
-            itemList: ['编辑这节课', '删除这节课'],
-            success: (res) => {
-                if (res.tapIndex === 0) {
-                    wx.navigateTo({ url: '/pages/course-edit/course-edit?id=' + course.id });
-                } else if (res.tapIndex === 1) {
-                    this.confirmRemove(course);
-                }
-            },
-            fail: () => {},
-        });
+    // 点课程卡片 / 格子里的课程：先只读查看，编辑和删除都在详情里再点一次
+    openCourseDetail(course) {
+        if (!course) return;
+        this.setData({ showCourseDetail: true, detailCourse: course });
+    },
+
+    closeCourseDetail() {
+        this.setData({ showCourseDetail: false, detailCourse: null });
+    },
+
+    editFromDetail(event) {
+        const id = (event && event.detail && event.detail.id) || (this.data.detailCourse || {}).id;
+        this.closeCourseDetail();
+        if (!id) return;
+        wx.navigateTo({ url: '/pages/course-edit/course-edit?id=' + id });
+    },
+
+    async removeFromDetail(event) {
+        const course = this.data.detailCourse || {};
+        if (!course.id) return;
+        this.closeCourseDetail();
+        await this.confirmRemove(course);
     },
 
     async confirmRemove(course) {

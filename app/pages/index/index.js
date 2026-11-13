@@ -53,6 +53,9 @@ Page({
         selectedIds: [],
         selectedCount: 0,
         batchBusy: false,
+        showCourseDetail: false,
+        detailCourse: null,
+        detailBusy: false,
     },
 
     onLoad() {
@@ -136,6 +139,9 @@ Page({
             batchMode: false,
             selectedIds: [],
             selectedCount: 0,
+            // 身份 / 数据刷新后关闭详情，避免展示另一份课表里的课程
+            showCourseDetail: false,
+            detailCourse: null,
         };
         // 只有「首次进入 / 重新登录」才把周次重置回本周；
         // 取消、删除、下拉刷新都保持用户当前所在的周，避免连周次一起被甩回去。
@@ -518,17 +524,92 @@ Page({
         await this.loadAll({ keepScroll: true });
     },
 
+    // 点课程卡片：只读查看，不再直接跳编辑页
+    findCourseById(id) {
+        const key = String(id);
+        let found = null;
+        (this.rawColumns || []).forEach(col => (col.cells || []).forEach(cell => {
+            (cell.courses || []).forEach(course => {
+                if (String(course.id) === key) found = course;
+            });
+        }));
+        return found;
+    },
+
+    openCourseDetail(course) {
+        if (!course) return;
+        // 月视图抽屉与详情不叠加，打开详情时收起抽屉
+        this.setData({ showCourseDetail: true, detailCourse: course, showDaySheet: false });
+    },
+
+    closeCourseDetail() {
+        this.setData({ showCourseDetail: false, detailCourse: null });
+    },
+
+    onSheetCourseTap(event) {
+        const id = event.currentTarget.dataset.id;
+        const course = (this.data.selectedDayCourses || []).find(item => String(item.id) === String(id));
+        if (course) this.openCourseDetail(course);
+    },
+
+    editFromDetail(event) {
+        const id = (event && event.detail && event.detail.id) || (this.data.detailCourse || {}).id;
+        this.closeCourseDetail();
+        if (!id) return;
+        if (this.data.demoMode || this.data.authState !== 'signed-in') {
+            wx.showToast({ title: '登录后即可编辑课程', icon: 'none' });
+            return;
+        }
+        wx.navigateTo({ url: '/pages/course-edit/course-edit?id=' + id });
+    },
+
+    async removeFromDetail(event) {
+        if (this.data.detailBusy) return;
+        const detail = (event && event.detail) || {};
+        const course = this.data.detailCourse || {};
+        const id = detail.id || course.id;
+        const title = detail.title || course.title || '这节课';
+        if (!id) return;
+        const confirmed = await new Promise((resolve) => {
+            wx.showModal({
+                title: '删除「' + title + '」？',
+                content: '会移到「已删除的课程」，随时可以恢复。',
+                confirmText: '删除',
+                confirmColor: '#d95050',
+                success: res => resolve(Boolean(res.confirm)),
+                fail: () => resolve(false),
+            });
+        });
+        if (!confirmed) return;
+        if (this.data.demoMode || this.data.authState !== 'signed-in') {
+            wx.showToast({ title: '登录后即可管理课程', icon: 'none' });
+            return;
+        }
+        this.setData({ detailBusy: true });
+        let result;
+        try {
+            result = await store.removeCourse(id);
+        } catch (error) {
+            result = { error: { message: (error && error.message) || '删除失败，请重试' } };
+        }
+        this.setData({ detailBusy: false });
+        if (result.error) {
+            wx.showToast({ title: result.error.message || '删除失败', icon: 'none' });
+            return;
+        }
+        this.closeCourseDetail();
+        wx.showToast({ title: '已移入已删除', icon: 'success' });
+        // 删除后仍停在当前列与当前周，不把用户甩回今天
+        await this.loadAll({ keepScroll: true });
+    },
+
     onCourseTap(event) {
         if (this.data.batchMode) {
             this.toggleSelectAt(event.currentTarget.dataset.id);
             return;
         }
-        if (this.data.demoMode || this.data.authState !== 'signed-in') {
-            wx.showToast({ title: '登录后即可编辑课程', icon: 'none' });
-            return;
-        }
-        const id = event.currentTarget.dataset.id;
-        wx.navigateTo({ url: '/pages/course-edit/course-edit?id=' + id });
+        const course = this.findCourseById(event.currentTarget.dataset.id);
+        if (course) this.openCourseDetail(course);
     },
 
     onCellTap(event) {

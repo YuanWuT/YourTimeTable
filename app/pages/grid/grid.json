@@ -1,6 +1,7 @@
 {
   "navigationBarTitleText": "点格子录入",
   "usingComponents": {
-    "login-panel": "../../components/login-panel/login-panel"
+    "login-panel": "../../components/login-panel/login-panel",
+    "course-detail": "../../components/course-detail/course-detail"
   }
 }

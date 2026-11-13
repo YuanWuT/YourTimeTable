@@ -3,6 +3,7 @@
   "enablePullDownRefresh": true,
   "backgroundTextStyle": "light",
   "usingComponents": {
-    "login-panel": "../../components/login-panel/login-panel"
+    "login-panel": "../../components/login-panel/login-panel",
+    "course-detail": "../../components/course-detail/course-detail"
   }
 }
