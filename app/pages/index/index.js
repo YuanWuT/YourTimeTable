@@ -70,7 +70,8 @@ Page({
     },
 
     onPullDownRefresh() {
-        Promise.resolve(this.data.authState === 'signed-in' ? this.loadAll() : this.restore())
+        // 下拉刷新只更新数据，不把用户正在看的那一列拉回今天
+        Promise.resolve(this.data.authState === 'signed-in' ? this.loadAll({ keepScroll: true }) : this.restore())
             .then(() => wx.stopPullDownRefresh())
             .catch(() => wx.stopPullDownRefresh());
     },
@@ -100,7 +101,8 @@ Page({
         await this.loadAll();
     },
 
-    async loadAll() {
+    async loadAll(options) {
+        const keepScroll = Boolean(options && options.keepScroll);
         this.setData({ loading: true, errorText: '' });
         // 先同步身份，再按该身份拉取课程：不同身份各有一份独立课表
         const settingsResult = await store.syncSettings();
@@ -127,17 +129,21 @@ Page({
         getApp().globalData.periods = this.periods;
         getApp().globalData.courses = this.courses;
         const settings = this.settings;
-        const todayParity = S.parityOf(new Date(), settings.term_start);
-        this.setData({
+        const patch = {
             loading: false,
             errorText: '',
             role: settings.role,
-            weekOffsetNum: 0,
-            parityMode: todayParity,
             batchMode: false,
             selectedIds: [],
             selectedCount: 0,
-        }, () => this.recompute());
+        };
+        // 只有「首次进入 / 重新登录」才把周次重置回本周；
+        // 取消、删除、下拉刷新都保持用户当前所在的周，避免连周次一起被甩回去。
+        if (!keepScroll) {
+            patch.weekOffsetNum = 0;
+            patch.parityMode = S.parityOf(new Date(), settings.term_start);
+        }
+        this.setData(patch, () => this.recompute({ keepScroll: keepScroll }));
     },
 
     useDemo() {
@@ -205,7 +211,7 @@ Page({
         this.setData({ weekColumns: this.withSelection(this.rawColumns) });
     },
 
-    // 非批量模式的落点：本周停在今天，其它周从周一开始。
+    // 只有用户明确「回本周 / 切周 / 首次进入」时才归位：本周停在今天，其它周从周一开始。
     normalScrollTarget(offset) {
         if (offset === 0) return 'day-col-' + (S.dayOfWeek(new Date()) - 1);
         return 'day-col-0';
@@ -221,7 +227,10 @@ Page({
         this.setData({ scrollIntoId: target });
     },
 
-    recompute() {
+    // keepScroll=true 用于「取消批量 / 删除完成 / 下拉刷新」这类只刷新数据或状态的场景：
+    // 视图必须停在用户当前看的那一列，不能被自动拉回今天。
+    recompute(options) {
+        const keepScroll = Boolean(options && options.keepScroll);
         const settings = this.settings || {
             role: 'student',
             term_start: S.defaultTermStart(),
@@ -275,8 +284,8 @@ Page({
             ),
             nextCourse: S.nextClass(courses, settings.term_start),
         };
-        // 批量模式下完全不改写滚动目标：长按、勾选、全选都停留在用户当前看的那一列
-        if (!this.data.batchMode) {
+        // 批量模式、以及「只刷新不归位」的场景下完全不改写滚动目标
+        if (!keepScroll && !this.data.batchMode) {
             const target = this.normalScrollTarget(offset);
             if (target !== this.data.scrollIntoId) patch.scrollIntoId = target;
         }
@@ -305,7 +314,7 @@ Page({
         const mode = event.currentTarget.dataset.mode;
         if (!mode) return;
         if (mode === 'all') {
-            this.setData({ parityMode: 'all' }, () => this.recompute());
+            this.setData({ parityMode: 'all' }, () => this.recompute({ keepScroll: true }));
             return;
         }
         const offset = findOffsetForParity(
@@ -313,7 +322,7 @@ Page({
             mode,
             (this.settings || {}).term_start,
         );
-        this.setData({ weekOffsetNum: offset, parityMode: mode }, () => this.recompute());
+        this.setData({ weekOffsetNum: offset, parityMode: mode }, () => this.recompute({ keepScroll: true }));
     },
 
     goToday() {
@@ -340,7 +349,7 @@ Page({
             month = 1;
             year += 1;
         }
-        this.setData({ monthYear: year, monthMonth: month }, () => this.recompute());
+        this.setData({ monthYear: year, monthMonth: month }, () => this.recompute({ keepScroll: true }));
     },
 
     // 批量模式下的星期快捷跳转：不用左右滑动就能到周一 / 周日
@@ -421,10 +430,10 @@ Page({
 
     exitBatchMode() {
         this.selectedIds = [];
-        this.setData({ batchMode: false, selectedIds: [], selectedCount: 0 }, () => {
-            this.recompute();
-            this.scrollToId(this.normalScrollTarget(this.data.weekOffsetNum || 0));
-        });
+        // 「取消」只是退出勾选状态，视图必须停在当前那一列（周一 / 长按那天 / 快捷跳转的那天）。
+        // 不能 recompute()：非批量模式下它会把滚动目标改回今天；也不能 scrollToId()。
+        // scroll-into-view 的值保持不变，框架就不会重新滚动。
+        this.setData({ batchMode: false, selectedIds: [], selectedCount: 0 }, () => this.refreshSelection());
     },
 
     toggleSelectAt(id) {
@@ -505,7 +514,8 @@ Page({
         });
         this.selectedIds = [];
         this.setData({ batchMode: false, selectedIds: [], selectedCount: 0 });
-        await this.loadAll();
+        // 删完同样停在原处，不把用户甩回今天
+        await this.loadAll({ keepScroll: true });
     },
 
     onCourseTap(event) {
