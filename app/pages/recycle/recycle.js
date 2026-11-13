@@ -48,7 +48,31 @@ Page({
     async restoreOne(event) {
         if (this.data.busy) return;
         const id = event.currentTarget.dataset.id;
+        const target = (this.data.items || []).find(item => String(item.id) === String(id));
         this.setData({ busy: true });
+        // 课程被删后可能又重新导入了同一节；直接恢复会留下两条一模一样的课。
+        // 网格显示层会去重，用户看不到，但云端会越积越多。
+        if (target) {
+            const settingsResult = await store.syncSettings();
+            const role = settingsResult.error ? null : settingsResult.data.role;
+            const existingResult = role ? await store.listCourses(role) : { data: [], error: null };
+            const duplicate = (existingResult.data || []).some(course => S.isSameCourseSlot(course, target));
+            if (duplicate) {
+                this.setData({ busy: false });
+                const force = await new Promise((resolve) => {
+                    wx.showModal({
+                        title: '课表里已有同一节课',
+                        content: '「' + target.title + '」在当前身份的课表里已经存在，继续恢复会出现重复。确定仍要恢复吗？',
+                        confirmText: '仍然恢复',
+                        cancelText: '先不恢复',
+                        success: res => resolve(Boolean(res.confirm)),
+                        fail: () => resolve(false),
+                    });
+                });
+                if (!force) return;
+                this.setData({ busy: true });
+            }
+        }
         const result = await store.restoreCourse(id);
         this.setData({ busy: false });
         if (result.error) {

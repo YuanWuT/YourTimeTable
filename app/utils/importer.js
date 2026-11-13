@@ -232,8 +232,17 @@ const TEXT_MODEL_PRIORITY = ['fast-model', 'auto'];
 
 async function chooseModels(needImage) {
     const models = await cloud.llm.models.list();
-    const usable = (models || []).filter(m => m && m.enabled !== false && m.disabled !== true && m.id
-        && (!needImage || (m.supportsImages === true && m.disabledMultimodal !== true)));
+    const available = (models || []).filter(m => m && m.enabled !== false && m.disabled !== true && m.id);
+    let usable = available;
+    if (needImage) {
+        const vision = available.filter(m => m.supportsImages === true && m.disabledMultimodal !== true);
+        // 有些模型清单并不上报 supportsImages 字段，若严格过滤会得到空列表，
+        // 让拍照识别直接报「没有可用模型」。此时退回所有未禁用多模态的模型，
+        // 仍按视觉模型优先级挑，失败时再由 llmExtract 换下一个模型重试。
+        usable = vision.length > 0
+            ? vision
+            : available.filter(m => m.disabledMultimodal !== true);
+    }
     if (usable.length === 0) return [];
     const preference = needImage ? VISION_MODEL_PRIORITY : TEXT_MODEL_PRIORITY;
     const picked = [];

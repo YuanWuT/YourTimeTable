@@ -31,7 +31,7 @@
                 <text class="section-title">作息节次</text>
                 <text class="link-text" bindtap="resetPeriods">恢复默认</text>
             </view>
-            <text class="section-sub">删节次会立即生效；改时间后点「保存作息」。只有 6 节课可直接选「6 节」</text>
+            <text class="section-sub">新增 / 删除节次、快捷设节数会立即生效；只修改时间后需点「保存作息」。只有 6 节课可直接选「6 节」</text>
 
             <view class="quick-row">
                 <text class="quick-label">快捷设节数</text>

@@ -41,6 +41,16 @@
             </block>
         </view>
 
+        <scroll-view wx:if="{{batchMode}}" class="day-tabs-scroll" scroll-x="true">
+            <view class="day-tabs">
+                <view wx:for="{{dayTabs}}" wx:key="index" class="day-tab"
+                      data-index="{{item.index}}" bindtap="jumpToDay">
+                    <text class="day-tab-name">{{item.name}}</text>
+                    <text class="day-tab-count">{{item.count}} 节</text>
+                </view>
+            </view>
+        </scroll-view>
+
         <view class="grid-card">
             <view class="time-rail">
                 <view class="rail-head"><text>节次</text></view>
@@ -50,9 +60,9 @@
                     <text class="rail-time">{{item.end_time}}</text>
                 </view>
             </view>
-            <scroll-view class="days-scroll" scroll-x="true">
+            <scroll-view class="days-scroll" scroll-x="true" scroll-into-view="{{scrollIntoId}}">
                 <view class="days-inner">
-                    <view wx:for="{{columns}}" wx:key="key" class="day-col">
+                    <view wx:for="{{columns}}" wx:key="key" id="{{item.id}}" class="day-col">
                         <view class="day-head"><text class="day-name">{{item.dayName}}</text></view>
                         <view wx:for="{{item.cells}}" wx:for-item="cell" wx:key="key" class="grid-cell"
                               data-day="{{cell.day}}" data-period="{{cell.periodNo}}" bindtap="onCellTap">
@@ -76,7 +86,7 @@
             </scroll-view>
         </view>
 
-        <view class="grid-tip">{{batchMode ? '点卡片勾选或取消 · 可左右滑动继续选择' : '共 ' + courseCount + ' 节课 · 点空格子添加、长按课程批量管理'}}</view>
+        <view class="grid-tip">{{batchMode ? '点卡片勾选或取消 · 点上方星期可直接跳到那一天' : '共 ' + courseCount + ' 节课 · 点空格子添加、长按课程批量管理'}}</view>
         <view wx:if="{{!batchMode}}" class="fab" bindtap="onAddFree"><text class="fab-text">＋</text></view>
     </block>
 </view>

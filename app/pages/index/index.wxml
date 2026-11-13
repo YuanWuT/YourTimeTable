@@ -55,7 +55,7 @@
                     <view class="nav-arrow" data-step="1" bindtap="changeWeek">›</view>
                 </view>
 
-                <view class="parity-row">
+                <view wx:if="{{viewMode === 'week'}}" class="parity-row">
                     <text class="parity-label">显示</text>
                     <view class="chip {{parityMode === 'odd' ? 'chip-active' : ''}}" data-mode="odd" bindtap="chooseParity">单周</view>
                     <view class="chip {{parityMode === 'even' ? 'chip-active' : ''}}" data-mode="even" bindtap="chooseParity">双周</view>
@@ -103,6 +103,16 @@
                         </block>
                     </view>
 
+                    <scroll-view wx:if="{{batchMode}}" class="day-tabs-scroll" scroll-x="true">
+                        <view class="day-tabs">
+                            <view wx:for="{{dayTabs}}" wx:key="index" class="day-tab"
+                                  data-index="{{item.index}}" bindtap="jumpToDay">
+                                <text class="day-tab-name">{{item.name}}</text>
+                                <text class="day-tab-count">{{item.count}} 节</text>
+                            </view>
+                        </view>
+                    </scroll-view>
+
                     <view class="grid-card">
                         <view class="time-rail">
                         <view class="rail-head"><text>时间</text></view>
@@ -124,7 +134,8 @@
                                     <view wx:for="{{cell.courses}}" wx:for-item="course" wx:key="id"
                                           class="course-chip {{course.checked ? 'course-chip-checked' : ''}}"
                                           style="background:{{course.bg}};color:{{course.fg}};border-left:6rpx solid {{course.solid}}"
-                                          data-id="{{course.id}}" catchtap="onCourseTap" bindlongpress="onCourseLongPress">
+                                          data-id="{{course.id}}" data-day="{{course.day_of_week}}"
+                                          catchtap="onCourseTap" bindlongpress="onCourseLongPress">
                                         <view wx:if="{{batchMode}}" class="chip-check {{course.checked ? 'chip-check-on' : ''}}">
                                             <text wx:if="{{course.checked}}">✓</text>
                                         </view>
@@ -139,7 +150,7 @@
                     </scroll-view>
                 </view>
                 </block>
-                <view class="grid-tip">{{batchMode ? '点卡片勾选或取消 · 可左右滑动继续选择' : '本周共 ' + weekTotal + ' 节课 · 点空格子添加、长按课程批量管理'}}</view>
+                <view class="grid-tip">{{batchMode ? '点卡片勾选或取消 · 点上方星期可直接跳到那一天' : '本周共 ' + weekTotal + ' 节课 · 点空格子添加、长按课程批量管理'}}</view>
             </block>
 
             <!-- 月视图 -->
@@ -166,7 +177,7 @@
                             <text wx:if="{{item.count > 0}}" class="month-count">{{item.count}} 节</text>
                         </view>
                     </view>
-                    <text class="month-tip">单 / 双按开学第一周推算 · 点日期查看当天课程</text>
+                    <text class="month-tip">按开学第一周推算每天的单 / 双周 · 点日期查看当天实际课程</text>
                 </view>
             </block>
         </block>

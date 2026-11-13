@@ -324,8 +324,10 @@ function buildWeekColumns(courses, periods, monday, parity, todayKey) {
     return { columns, slots, total: columns.reduce((sum, col) => sum + col.count, 0) };
 }
 
-// 月视图：6 行 × 7 列，每格带周次单双与当天课程数
-function buildMonthCells(year, month, courses, termStart, todayKey, mode) {
+// 月视图是日历，每天必须按「这一天真实的单 / 双周」取课。
+// 周视图的「显示：单周 / 双周 / 全部」只是周视图的筛选器，不能让月视图把
+// 仅单周的课程画到双周的日期上，因此这里不接收 parityMode。
+function buildMonthCells(year, month, courses, termStart, todayKey) {
     const first = new Date(year, month - 1, 1);
     const startOffset = (first.getDay() + 6) % 7;
     const gridStart = addDays(first, -startOffset);
@@ -335,7 +337,7 @@ function buildMonthCells(year, month, courses, termStart, todayKey, mode) {
         const date = addDays(gridStart, i);
         const key = formatDate(date);
         const inMonth = date.getMonth() === month - 1 && date.getFullYear() === year;
-        const parity = mode === 'all' ? 'all' : parityOf(date, termStart);
+        const parity = parityOf(date, termStart);
         const day = dayOfWeek(date);
         const list = dedupeCourses(source.filter(c => Number(c.day_of_week) === day && courseVisible(c, parity)));
         cells.push({
@@ -344,7 +346,7 @@ function buildMonthCells(year, month, courses, termStart, todayKey, mode) {
             inMonth: inMonth,
             isToday: key === todayKey,
             parity: parity,
-            parityText: parity === 'all' ? '全' : parity === 'odd' ? '单' : '双',
+            parityText: parity === 'odd' ? '单' : '双',
             count: list.length,
             dots: list.slice(0, 3).map((c, i) => ({ id: 'dot-' + i, color: c.solid })),
             courses: list,

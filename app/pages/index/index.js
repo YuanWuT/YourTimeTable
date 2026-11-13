@@ -14,6 +14,8 @@ function findOffsetForParity(currentOffset, wanted, termStart) {
     return currentOffset;
 }
 
+const EMPTY_DAY_TABS = S.DAY_NAMES.map((name, index) => ({ index: index, name: name, count: 0 }));
+
 Page({
     data: {
         authState: 'checking',
@@ -35,6 +37,7 @@ Page({
         weekColumns: [],
         timeRail: [],
         scrollIntoId: '',
+        dayTabs: EMPTY_DAY_TABS,
         monthYear: 2026,
         monthMonth: 1,
         monthTitle: '',
@@ -58,6 +61,7 @@ Page({
         this.courses = [];
         this.periods = [];
         this.selectedIds = [];
+        this.rawColumns = [];
         this.setData({ monthYear: now.getFullYear(), monthMonth: now.getMonth() + 1 });
     },
 
@@ -179,6 +183,44 @@ Page({
         }));
     },
 
+    // 当前视图真正渲染出来的课程 id（已按单双周过滤、已去重）。
+    // 「全选」只能勾选这些课程，否则会把屏幕上没显示的课一起删掉。
+    visibleCourseIds() {
+        const ids = [];
+        const seen = {};
+        (this.rawColumns || []).forEach(col => (col.cells || []).forEach(cell =>
+            (cell.courses || []).forEach(course => {
+                const key = String(course.id);
+                if (!seen[key]) {
+                    seen[key] = true;
+                    ids.push(key);
+                }
+            })
+        ));
+        return ids;
+    },
+
+    // 勾选 / 全选只刷新卡片状态，绝不重新计算滚动位置，避免「勾一节课就跳回今天」。
+    refreshSelection() {
+        this.setData({ weekColumns: this.withSelection(this.rawColumns) });
+    },
+
+    // 非批量模式的落点：本周停在今天，其它周从周一开始。
+    normalScrollTarget(offset) {
+        if (offset === 0) return 'day-col-' + (S.dayOfWeek(new Date()) - 1);
+        return 'day-col-0';
+    },
+
+    // scroll-into-view 的值不变时框架不会再次滚动，先清空再赋值才能强制归位。
+    scrollToId(target) {
+        if (!target) return;
+        if (this.data.scrollIntoId === target) {
+            this.setData({ scrollIntoId: '' }, () => this.setData({ scrollIntoId: target }));
+            return;
+        }
+        this.setData({ scrollIntoId: target });
+    },
+
     recompute() {
         const settings = this.settings || {
             role: 'student',
@@ -196,16 +238,14 @@ Page({
         const mode = this.data.parityMode || actualParity;
         const sunday = S.addDays(monday, 6);
         const grid = S.buildWeekColumns(courses, periods, monday, mode, todayKey);
+        this.rawColumns = grid.columns;
+        // 切换周次 / 单双周后，把不再显示的课程的勾选清掉，避免误删看不见的课
+        const visible = {};
+        this.visibleCourseIds().forEach(id => { visible[id] = true; });
+        const pruned = (this.selectedIds || []).filter(id => visible[String(id)]);
+        this.selectedIds = pruned;
         const role = ROLES.find(item => item.key === settings.role) || ROLES[0];
-        const monthCells = S.buildMonthCells(
-            this.data.monthYear,
-            this.data.monthMonth,
-            courses,
-            settings.term_start,
-            todayKey,
-            mode,
-        );
-        this.setData({
+        const patch = {
             roleName: role.name,
             roleIcon: role.icon,
             roleDesc: role.desc,
@@ -217,16 +257,35 @@ Page({
             timeRail: grid.slots,
             weekTotal: grid.total,
             courseCount: courses.length,
-            scrollIntoId: offset === 0 ? 'day-col-' + (S.dayOfWeek(today) - 1) : '',
+            selectedIds: pruned,
+            selectedCount: pruned.length,
+            dayTabs: grid.columns.map((col, index) => ({
+                index: index,
+                name: S.DAY_NAMES[index],
+                count: col.count,
+            })),
             monthTitle: this.data.monthYear + '年' + this.data.monthMonth + '月',
-            monthCells: monthCells,
+            monthCells: S.buildMonthCells(
+                this.data.monthYear,
+                this.data.monthMonth,
+                courses,
+                settings.term_start,
+                todayKey,
+            ),
             nextCourse: S.nextClass(courses, settings.term_start),
-        });
+        };
+        // 批量模式下完全不改写滚动目标：长按、勾选、全选都停留在用户当前看的那一列
+        if (!this.data.batchMode) {
+            const target = this.normalScrollTarget(offset);
+            if (target !== this.data.scrollIntoId) patch.scrollIntoId = target;
+        }
+        this.setData(patch);
     },
 
     switchView(event) {
         const mode = event.currentTarget.dataset.mode;
         if (!mode || mode === this.data.viewMode) return;
+        if (mode === 'month' && this.data.batchMode) this.exitBatchMode();
         this.setData({ viewMode: mode });
     },
 
@@ -235,7 +294,10 @@ Page({
         const offset = (this.data.weekOffsetNum || 0) + step;
         const monday = S.addDays(S.mondayOf(new Date()), offset * 7);
         const parity = S.parityOf(monday, (this.settings || {}).term_start);
-        this.setData({ weekOffsetNum: offset, parityMode: parity }, () => this.recompute());
+        this.setData({ weekOffsetNum: offset, parityMode: parity }, () => {
+            this.recompute();
+            this.scrollToId(this.data.batchMode ? 'day-col-0' : this.normalScrollTarget(offset));
+        });
     },
 
     chooseParity(event) {
@@ -260,7 +322,10 @@ Page({
             parityMode: S.parityOf(now, (this.settings || {}).term_start),
             monthYear: now.getFullYear(),
             monthMonth: now.getMonth() + 1,
-        }, () => this.recompute());
+        }, () => {
+            this.recompute();
+            this.scrollToId(this.data.batchMode ? 'day-col-0' : this.normalScrollTarget(0));
+        });
     },
 
     changeMonth(event) {
@@ -275,6 +340,13 @@ Page({
             year += 1;
         }
         this.setData({ monthYear: year, monthMonth: month }, () => this.recompute());
+    },
+
+    // 批量模式下的星期快捷跳转：不用左右滑动就能到周一 / 周日
+    jumpToDay(event) {
+        const index = Number(event.currentTarget.dataset.index);
+        if (!Number.isFinite(index) || index < 0 || index > 6) return;
+        this.scrollToId('day-col-' + index);
     },
 
     onDayTap(event) {
@@ -334,17 +406,24 @@ Page({
 
     toggleBatchMode() {
         if (!this.canManage()) return;
-        if ((this.courses || []).length === 0) {
-            wx.showToast({ title: '还没有课程可以勾选', icon: 'none' });
+        if (this.visibleCourseIds().length === 0) {
+            wx.showToast({ title: '当前视图没有课程可以勾选', icon: 'none' });
             return;
         }
         this.selectedIds = [];
-        this.setData({ batchMode: true, selectedIds: [], selectedCount: 0 }, () => this.recompute());
+        this.setData({ batchMode: true, selectedIds: [], selectedCount: 0 }, () => {
+            this.recompute();
+            // 批量模式从周一开始，避免「今天周五」把周一顶到屏幕外
+            this.scrollToId('day-col-0');
+        });
     },
 
     exitBatchMode() {
         this.selectedIds = [];
-        this.setData({ batchMode: false, selectedIds: [], selectedCount: 0 }, () => this.recompute());
+        this.setData({ batchMode: false, selectedIds: [], selectedCount: 0 }, () => {
+            this.recompute();
+            this.scrollToId(this.normalScrollTarget(this.data.weekOffsetNum || 0));
+        });
     },
 
     toggleSelectAt(id) {
@@ -354,29 +433,40 @@ Page({
         if (index >= 0) list.splice(index, 1);
         else list.push(key);
         this.selectedIds = list;
-        this.setData({ selectedIds: list, selectedCount: list.length }, () => this.recompute());
+        this.setData({ selectedIds: list, selectedCount: list.length }, () => this.refreshSelection());
     },
 
     onCourseLongPress(event) {
         if (!this.canManage()) return;
         const id = event.currentTarget.dataset.id;
         if (!this.data.batchMode) {
+            const day = Number(event.currentTarget.dataset.day) || 0;
+            const target = day >= 1 && day <= 7 ? 'day-col-' + (day - 1) : 'day-col-0';
             this.selectedIds = [];
-            this.setData({ batchMode: true, selectedCount: 0 }, () => this.toggleSelectAt(id));
+            this.setData({ batchMode: true, selectedIds: [], selectedCount: 0 }, () => {
+                this.recompute();
+                // 长按哪一天就停在哪一天，不再被拉回今天
+                this.scrollToId(target);
+                this.toggleSelectAt(id);
+            });
             return;
         }
         this.toggleSelectAt(id);
     },
 
     selectAllBatch() {
-        const all = (this.courses || []).map(course => String(course.id));
+        const visible = this.visibleCourseIds();
+        if (visible.length === 0) {
+            wx.showToast({ title: '当前视图没有课程可以勾选', icon: 'none' });
+            return;
+        }
         const chosen = this.selectedIds || [];
-        const allSelected = all.length > 0 && all.every(id => chosen.indexOf(id) >= 0);
-        this.selectedIds = allSelected ? [] : all;
+        const allSelected = visible.every(id => chosen.indexOf(id) >= 0);
+        this.selectedIds = allSelected ? [] : visible.slice();
         this.setData({
             selectedIds: this.selectedIds,
             selectedCount: this.selectedIds.length,
-        }, () => this.recompute());
+        }, () => this.refreshSelection());
     },
 
     async confirmBatchRemove() {
@@ -405,7 +495,13 @@ Page({
             wx.showToast({ title: result.error.message || '删除失败', icon: 'none' });
             return;
         }
-        wx.showToast({ title: '已删除 ' + ids.length + ' 节', icon: 'success' });
+        const removed = typeof result.data === 'number' ? result.data : ids.length;
+        wx.showToast({
+            title: removed < ids.length
+                ? '已删除 ' + removed + ' 节，' + (ids.length - removed) + ' 节未找到'
+                : '已删除 ' + removed + ' 节',
+            icon: removed < ids.length ? 'none' : 'success',
+        });
         this.selectedIds = [];
         this.setData({ batchMode: false, selectedIds: [], selectedCount: 0 });
         await this.loadAll();

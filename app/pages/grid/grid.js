@@ -2,6 +2,8 @@ const { ROLES } = require('../../utils/config');
 const store = require('../../utils/store');
 const S = require('../../utils/schedule');
 
+const EMPTY_DAY_TABS = S.DAY_NAMES.map((name, index) => ({ index: index, name: name, count: 0 }));
+
 Page({
     data: {
         authState: 'checking',
@@ -16,6 +18,8 @@ Page({
         selectedIds: [],
         selectedCount: 0,
         batchBusy: false,
+        scrollIntoId: 'day-col-0',
+        dayTabs: EMPTY_DAY_TABS,
     },
 
     onLoad() {
@@ -75,6 +79,11 @@ Page({
             batchMode: false,
             selectedIds: [],
             selectedCount: 0,
+            dayTabs: grid.columns.map((col, index) => ({
+                index: index,
+                name: S.DAY_NAMES[index],
+                count: col.count,
+            })),
         });
     },
 
@@ -94,6 +103,38 @@ Page({
         this.setData({ columns: this.withSelection(this.data.columns) });
     },
 
+    // 「全选」只勾选网格里真正显示的课程，不把去重后被隐藏的重复卡片一起算进去
+    visibleCourseIds() {
+        const ids = [];
+        const seen = {};
+        (this.data.columns || []).forEach(col => (col.cells || []).forEach(cell =>
+            (cell.courses || []).forEach(course => {
+                const key = String(course.id);
+                if (!seen[key]) {
+                    seen[key] = true;
+                    ids.push(key);
+                }
+            })
+        ));
+        return ids;
+    },
+
+    // scroll-into-view 值不变时框架不会重新滚动，先清空再赋值强制归位
+    scrollToId(target) {
+        if (!target) return;
+        if (this.data.scrollIntoId === target) {
+            this.setData({ scrollIntoId: '' }, () => this.setData({ scrollIntoId: target }));
+            return;
+        }
+        this.setData({ scrollIntoId: target });
+    },
+
+    jumpToDay(event) {
+        const index = Number(event.currentTarget.dataset.index);
+        if (!Number.isFinite(index) || index < 0 || index > 6) return;
+        this.scrollToId('day-col-' + index);
+    },
+
     canManage() {
         if (this.data.authState !== 'signed-in') {
             wx.showToast({ title: '登录后即可管理课程', icon: 'none' });
@@ -104,7 +145,7 @@ Page({
 
     toggleBatchMode() {
         if (!this.canManage()) return;
-        if ((this.courses || []).length === 0) {
+        if (this.visibleCourseIds().length === 0) {
             wx.showToast({ title: '还没有课程可以勾选', icon: 'none' });
             return;
         }
@@ -132,17 +173,22 @@ Page({
         const id = event.currentTarget.dataset.id;
         if (!this.data.batchMode) {
             this.selectedIds = [];
-            this.setData({ batchMode: true, selectedCount: 0 }, () => this.toggleSelectAt(id));
+            // 录入网格本来就从周一开始，进入批量模式不改动滚动位置
+            this.setData({ batchMode: true, selectedIds: [], selectedCount: 0 }, () => this.toggleSelectAt(id));
             return;
         }
         this.toggleSelectAt(id);
     },
 
     selectAllBatch() {
-        const all = (this.courses || []).map(course => String(course.id));
+        const visible = this.visibleCourseIds();
+        if (visible.length === 0) {
+            wx.showToast({ title: '还没有课程可以勾选', icon: 'none' });
+            return;
+        }
         const chosen = this.selectedIds || [];
-        const allSelected = all.length > 0 && all.every(id => chosen.indexOf(id) >= 0);
-        this.selectedIds = allSelected ? [] : all;
+        const allSelected = visible.every(id => chosen.indexOf(id) >= 0);
+        this.selectedIds = allSelected ? [] : visible.slice();
         this.setData({
             selectedIds: this.selectedIds,
             selectedCount: this.selectedIds.length,
@@ -175,7 +221,13 @@ Page({
             wx.showToast({ title: result.error.message || '删除失败', icon: 'none' });
             return;
         }
-        wx.showToast({ title: '已删除 ' + ids.length + ' 节', icon: 'success' });
+        const removed = typeof result.data === 'number' ? result.data : ids.length;
+        wx.showToast({
+            title: removed < ids.length
+                ? '已删除 ' + removed + ' 节，' + (ids.length - removed) + ' 节未找到'
+                : '已删除 ' + removed + ' 节',
+            icon: removed < ids.length ? 'none' : 'success',
+        });
         this.selectedIds = [];
         this.setData({ batchMode: false, selectedIds: [], selectedCount: 0 });
         await this.load();

@@ -134,7 +134,7 @@ Page({
         this.setData({ periods: periods, errorText: '' });
     },
 
-    addPeriod() {
+    async addPeriod() {
         const periods = this.data.periods.slice();
         if (periods.length >= 16) {
             wx.showToast({ title: '最多 16 个节次', icon: 'none' });
@@ -150,7 +150,9 @@ Page({
             start_time: toTime(startMinutes),
             end_time: toTime(startMinutes + 45),
         });
-        this.setData({ periods: periods });
+        // 与「删除节次」「快捷设节数」保持一致：新增立刻写云端，
+        // 避免用户以为加好了，返回页面后却丢失。
+        await this.persistPeriods(periods, '已新增节次');
     },
 
     // 删除 / 快捷设节数都即时写云端，避免用户以为「没生效」
@@ -244,7 +246,7 @@ Page({
             this.setData({ errorText: result.error.message || '保存作息失败' });
             return;
         }
-        this.setData({ periods: result.data.map(item => Object.assign({}, item)) });
+        this.setData({ periods: (result.data || []).map(item => Object.assign({}, item)) });
         wx.showToast({ title: '作息时间已保存', icon: 'success' });
     },
 
@@ -280,6 +282,19 @@ Page({
 
     async syncCalendar() {
         if (this.data.calendarBusy) return;
+        // 日历 API 每次调用都会「新建」事件，没有去重能力；先确认，避免用户
+        // 反复点同步后系统日历里堆出一堆重复提醒。
+        const confirmed = await new Promise((resolve) => {
+            wx.showModal({
+                title: '写入手机日历？',
+                content: '会在系统日历新建上课提醒。重复同步可能产生重复事件，建议只在课表有较大变动时同步一次。',
+                confirmText: '开始同步',
+                cancelText: '再想想',
+                success: res => resolve(Boolean(res.confirm)),
+                fail: () => resolve(false),
+            });
+        });
+        if (!confirmed) return;
         this.setData({ calendarBusy: true });
         const result = await reminder.syncCalendar(this.courses, this.data.termStart, LEAD_OPTIONS[this.data.leadIndex]);
         this.setData({ calendarBusy: false });
@@ -288,6 +303,18 @@ Page({
             return;
         }
         const info = result.data;
+        // 一次最多写入 40 条日历事件，超出的部分原来是静默丢掉的，必须明确告诉用户
+        if (info.truncated) {
+            wx.showModal({
+                title: '有课程未同步',
+                content: '一次最多写入 40 条日历提醒，本次写入 ' + info.added + ' 条。'
+                    + '课程较多时请删掉不需要提醒的课程，或改用微信订阅消息；'
+                    + '重复点击「同步日历」会在系统日历里产生重复事件。',
+                showCancel: false,
+                confirmText: '我知道了',
+            });
+            return;
+        }
         const message = info.failed > 0
             ? '已写入 ' + info.added + ' 条，' + info.failed + ' 条未获授权'
             : '已写入 ' + info.added + ' 条日历提醒';

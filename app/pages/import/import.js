@@ -380,14 +380,21 @@ Page({
             return;
         }
 
-        // 3) 不同课程却占用同一时间段：交给用户确认，不静默覆盖
-        const clashes = fresh.filter(item => S.findConflicts(item, existing).length > 0);
-        if (clashes.length > 0) {
-            const firstClash = S.findConflicts(clashes[0], existing)[0];
+        // 3) 不同课程却占用同一时间段：既比对云端已有课程，也检查本次导入内部互相重叠，
+        //    否则一次导入里两门课挤在同一节不会有任何提示。
+        const clashLabels = [];
+        fresh.forEach((item, index) => {
+            const outside = S.findConflicts(item, existing);
+            if (outside.length > 0) clashLabels.push(S.conflictLabel(outside[0]));
+            const inside = S.findConflicts(item, fresh.slice(0, index));
+            if (inside.length > 0) clashLabels.push(S.conflictLabel(inside[0]));
+        });
+        if (clashLabels.length > 0) {
             const confirmed = await new Promise((resolve) => {
                 wx.showModal({
                     title: '有课程时间重叠',
-                    content: '有 ' + clashes.length + ' 节课与已有课程时间重叠（如 ' + S.conflictLabel(firstClash) + '）。仍要导入吗？',
+                    content: '发现 ' + clashLabels.length + ' 处时间重叠（如 ' + clashLabels[0]
+                        + '），可能包含本次导入课程之间的冲突。仍要导入吗？',
                     confirmText: '仍然导入',
                     cancelText: '先不导入',
                     success: res => resolve(Boolean(res.confirm)),

@@ -363,30 +363,79 @@ async function listPeriods() {
     }
 }
 
+function idOf(value) {
+    if (value === undefined || value === null || value === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) && String(n) === String(value) ? n : value;
+}
+
+// 节次数减少后，原本排在「第 7~10 节」的课程 period_no 会越界，
+// slotIndexFor 只能把它们硬塞进最后一节，看起来像几节课挤在一起。
+// 保存作息时把这些课程统一收敛到最后一节的标准时间，保证课表与作息一致。
+async function clampCoursePeriods(periods) {
+    const maxNo = (periods || []).length;
+    if (maxNo < 1) return;
+    let result;
+    try {
+        result = await coursesAccess.list();
+    } catch (error) {
+        return;
+    }
+    if (!result || result.error) return;
+    const last = periods[maxNo - 1];
+    const ids = (result.data || [])
+        .filter(item => !item.deleted && Number(item.period_no) > maxNo)
+        .map(item => idOf(item.id))
+        .filter(id => id !== null);
+    if (ids.length === 0) return;
+    const patch = {
+        period_no: maxNo,
+        start_time: last.start_time,
+        end_time: last.end_time,
+    };
+    try {
+        const builder = cloud.database.from('courses').update(patch);
+        if (typeof builder.in === 'function') {
+            await builder.in('id', ids).select('id');
+        } else {
+            for (let i = 0; i < ids.length; i += 1) {
+                await coursesAccess.update(ids[i], patch);
+            }
+        }
+    } catch (error) {
+        // 课程收敛属于补偿动作，失败不影响作息本身已经保存成功
+    }
+}
+
 async function replacePeriods(list) {
     try {
         const current = await periodsAccess.list();
         if (current.error) return current;
         const existing = current.data || [];
+        // 统一用字符串比较：云端 id 可能是数字，也可能被序列化成字符串，
+        // 类型不一致会把「刚更新过的行」误判成待删除行。
         const keepIds = [];
         for (let i = 0; i < (list || []).length; i += 1) {
             const item = list[i];
             const row = periodToRow(Object.assign({}, item, { sort_no: i + 1 }));
-            if (item.id && typeof item.id === 'number') {
-                keepIds.push(item.id);
-                const updated = await periodsAccess.update(item.id, row);
+            const id = idOf(item.id);
+            if (id !== null) {
+                keepIds.push(String(id));
+                const updated = await periodsAccess.update(id, row);
                 if (updated.error) return updated;
             } else {
                 const created = await periodsAccess.create(row);
                 if (created.error) return created;
-                if (created.data && created.data.id) keepIds.push(created.data.id);
+                if (created.data && created.data.id !== undefined) keepIds.push(String(idOf(created.data.id)));
             }
         }
-        const removed = existing.filter(item => keepIds.indexOf(item.id) < 0);
+        const removed = existing.filter(item => keepIds.indexOf(String(item.id)) < 0);
         for (let i = 0; i < removed.length; i += 1) {
             await periodsAccess.remove(removed[i].id);
         }
-        return listPeriods();
+        const saved = await listPeriods();
+        if (!saved.error) await clampCoursePeriods(saved.data || []);
+        return saved;
     } catch (error) {
         return fail(clientError(error));
     }

@@ -166,6 +166,47 @@
     opacity: 0.45;
 }
 
+/* 批量模式的星期快捷跳转 */
+.day-tabs-scroll {
+    white-space: nowrap;
+    margin-bottom: 16rpx;
+}
+
+.day-tabs {
+    display: inline-flex;
+    padding: 8rpx;
+    background: #ffffff;
+    border: 2rpx solid #e8ecf3;
+    border-radius: 20rpx;
+}
+
+.day-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 92rpx;
+    padding: 10rpx 14rpx;
+    margin-right: 8rpx;
+    border-radius: 14rpx;
+    background: #f2f5fa;
+}
+
+.day-tab:last-child {
+    margin-right: 0;
+}
+
+.day-tab-name {
+    font-size: 23rpx;
+    font-weight: 600;
+    color: #2f6bed;
+}
+
+.day-tab-count {
+    font-size: 19rpx;
+    color: #8a94a6;
+    margin-top: 2rpx;
+}
+
 .chip-check {
     position: absolute;
     top: 6rpx;
