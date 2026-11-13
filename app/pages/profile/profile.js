@@ -154,8 +154,15 @@ Page({
         });
         if (!confirmed) return;
         this.setData({ signOutBusy: true });
-        const result = await cloud.auth.signOut();
-        this.setData({ signOutBusy: false });
+        let result;
+        try {
+            result = await cloud.auth.signOut();
+        } catch (error) {
+            // 网络异常时也要复位按钮，否则「退出登录」会永久禁用
+            result = { error: { message: (error && error.message) || '网络异常，请稍后重试' } };
+        } finally {
+            this.setData({ signOutBusy: false });
+        }
         if (result && result.error) {
             wx.showToast({ title: result.error.message || '退出失败', icon: 'none' });
             return;

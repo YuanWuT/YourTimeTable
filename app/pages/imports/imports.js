@@ -43,7 +43,7 @@ Page({
 
     async load() {
         this.setData({ loading: true, errorText: '' });
-        const result = await store.listImports();
+        const result = await store.listImports(100);
         if (result.error) {
             this.setData({ loading: false, errorText: result.error.message || '加载失败' });
             return;

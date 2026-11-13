@@ -18,7 +18,7 @@
 
         <view class="card">
             <text class="section-title">导入记录</text>
-            <text class="section-sub">每次识别或导入都会留一条记录，共 {{items.length}} 次 · 累计识别 {{totalRows}} 节课；课程本身可在课表页查看</text>
+            <text class="section-sub">只有「确认导入」成功才记一条，共 {{items.length}} 次 · 累计导入 {{totalRows}} 节课（最多显示最近 100 次；早期记录统计的是识别条数）</text>
         </view>
 
         <view wx:if="{{items.length === 0}}" class="empty-card">
@@ -37,6 +37,7 @@
             </view>
             <text class="import-file">{{item.fileName}}</text>
             <text wx:if="{{item.hasFile}}" class="import-cloud">原始文件已存云端</text>
+            <text wx:else class="import-cloud">原始文件未存云端（不影响课表）</text>
         </view>
 
         <view class="imports-footer">

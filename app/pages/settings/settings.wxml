@@ -20,7 +20,7 @@
             <text class="section-sub">以「第一周周一」为基准推算周次：第 1 周为单周，第 2 周为双周，依此类推</text>
             <view class="field setting-field">
                 <text class="field-label">开学第一周的周一</text>
-                <picker mode="date" value="{{termStart}}" bindchange="onTermStartChange">
+                <picker mode="date" value="{{termStart}}" end="{{today}}" bindchange="onTermStartChange">
                     <view class="picker-value">{{termStart}} <text class="picker-arrow">›</text></view>
                 </picker>
             </view>
@@ -82,9 +82,10 @@
             <view class="remind-row">
                 <view class="grow">
                     <text class="remind-title">微信订阅消息</text>
-                    <text class="remind-status">{{subscribeStatus}}</text>
+                    <text class="remind-status">{{templatesReady ? subscribeStatus : '未配置模板 ID · 正式上线前需申请订阅消息模板'}}</text>
                 </view>
-                <button class="ghost-btn remind-btn" bindtap="requestSubscribe">开启授权</button>
+                <button class="ghost-btn remind-btn" disabled="{{!templatesReady}}"
+                        bindtap="requestSubscribe">{{templatesReady ? '开启授权' : '未配置'}}</button>
             </view>
             <view class="remind-row">
                 <view class="grow">

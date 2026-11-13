@@ -245,12 +245,13 @@ Page({
         const pruned = (this.selectedIds || []).filter(id => visible[String(id)]);
         this.selectedIds = pruned;
         const role = ROLES.find(item => item.key === settings.role) || ROLES[0];
+        const weekNo = S.weekNumber(monday, settings.term_start);
         const patch = {
             roleName: role.name,
             roleIcon: role.icon,
             roleDesc: role.desc,
             role: role.key,
-            weekLabel: '第 ' + S.weekNumber(monday, settings.term_start) + ' 周 · ' + S.parityLabel(actualParity),
+            weekLabel: (weekNo > 0 ? '第 ' + weekNo + ' 周' : '未开学') + ' · ' + S.parityLabel(actualParity),
             dateRange: (monday.getMonth() + 1) + '月' + monday.getDate() + '日 – ' + (sunday.getMonth() + 1) + '月' + sunday.getDate() + '日',
             parityMode: mode,
             weekColumns: this.withSelection(grid.columns),

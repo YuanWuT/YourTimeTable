@@ -2,7 +2,7 @@
 // 解析结果统一归一化成课程对象，交给导入页确认后再批量写入云端。
 const { cloud } = require('./cloud');
 const { COURSE_COLORS, NOTE_MAX_LENGTH } = require('./config');
-const { DEFAULT_PERIODS, timeToMinutes, normalizePeriods } = require('./schedule');
+const { DEFAULT_PERIODS, timeToMinutes, normalizePeriods, normalizeTime: normalizeClock } = require('./schedule');
 
 const SYSTEM_PROMPT = [
     '你是中文课程表信息抽取助手。把用户提供的课程表转换成 JSON，只输出 JSON，不要解释、不要 Markdown 代码块。',
@@ -49,28 +49,43 @@ function parseWeekday(value) {
     return 1;
 }
 
+// 周次只认明确的「单周 / 双周 / 单双周 / 每周」及英文缩写。
+// 必须先判「单双周」，否则裸 /单/ 会把它误判成仅单周；也不再用 /单/i 匹配任意文本。
 function parseWeekType(value) {
-    const raw = String(value || '');
-    if (/单周|odd|单/i.test(raw)) return 'odd';
-    if (/双周|even|双/i.test(raw)) return 'even';
+    const raw = String(value === undefined || value === null ? '' : value).trim().toLowerCase();
+    if (!raw) return 'all';
+    if (/单双周|每周|both|all|every/.test(raw)) return 'all';
+    if (/双周|even|^双$/.test(raw)) return 'even';
+    if (/单周|odd|^单$/.test(raw)) return 'odd';
     return 'all';
 }
 
+// 把课程名里括号包裹的周次标记整段识别并剥离，记录式与矩阵式导入共用，
+// 避免「大学英语（单双周）」被切成「大学英语（单」+ 仅双周。
+function resolveWeekInfo(rawTitle, rawWeek) {
+    const title = String(rawTitle || '');
+    const bracket = title.match(/[（(]\s*([^()（）]{0,12}(?:单双周|单周|双周|每周)[^()（）]{0,4})\s*[)）]/);
+    const inline = bracket ? bracket[1] : ((title.match(/(单双周|单周|双周|每周)/) || [])[0] || '');
+    const field = String(rawWeek === undefined || rawWeek === null ? '' : rawWeek).trim();
+    const weekType = inline ? parseWeekType(inline) : (field ? parseWeekType(field) : 'all');
+    let cleaned = bracket ? title.replace(bracket[0], '').trim()
+        : (inline ? title.replace(inline, '').trim() : title);
+    cleaned = cleaned.replace(/[（(]\s*[)）]/g, '').trim();
+    return { title: cleaned, week_type: weekType };
+}
+
+// 时间解析统一收敛到 schedule.normalizeTime（越界 / 非法一律返回空），
+// 这里只额外支持 Excel 把时间存成「一天的小数」（0.333333 = 08:00）。
 function normalizeTime(value) {
-    const raw = String(value === undefined || value === null ? '' : value);
-    const match = raw.match(/(\d{1,2})\s*[:：]\s*(\d{2})/);
-    if (match) {
-        const h = Math.min(23, Number(match[1]));
-        const m = Math.min(59, Number(match[2]));
-        return (h < 10 ? '0' + h : String(h)) + ':' + (m < 10 ? '0' + m : String(m));
-    }
-    const compact = raw.match(/\b(\d{2})(\d{2})\b/);
-    if (compact) {
-        const h = Number(compact[1]);
-        const m = Number(compact[2]);
-        if (h < 24 && m < 60) return compact[1] + ':' + compact[2];
-    }
-    return '';
+    const normalized = normalizeClock(value);
+    if (normalized) return normalized;
+    const raw = String(value === undefined || value === null ? '' : value).trim();
+    if (!/^0?\.\d+$|^0$/.test(raw)) return '';
+    const minutes = Math.round(Number(raw) * 24 * 60);
+    if (minutes < 0 || minutes >= 1440) return '';
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return (h < 10 ? '0' + h : String(h)) + ':' + (m < 10 ? '0' + m : String(m));
 }
 
 function plusMinutes(time, delta) {
@@ -103,11 +118,12 @@ function periodAt(periods, no) {
 
 function normalizeCourse(raw, periods) {
     const item = raw || {};
-    let title = trimText(item.title || item.name || item.course || '', 60);
-    // 「大学英语（单周）」：先把周次标记拆出来。
-    const parityInTitle = title.match(/(单周|双周)/);
-    const weekType = parityInTitle ? parseWeekType(parityInTitle[1]) : parseWeekType(item.week_type || item.weeks || item.week);
-    if (parityInTitle) title = title.replace(/[（(]?\s*(单周|双周)\s*[)）]?/g, '').trim();
+    const week = resolveWeekInfo(
+        trimText(item.title || item.name || item.course || '', 60),
+        item.week_type !== undefined ? item.week_type : (item.weeks || item.week || ''),
+    );
+    let title = week.title;
+    const weekType = week.week_type;
     // 「数学（牛利）」：括号里的姓名是教师，不能混进课程名。
     let embeddedTeacher = '';
     const bracket = title.match(/^([\s\S]+?)[（(]([^()（）]{1,20})[)）]\s*$/);
@@ -127,7 +143,13 @@ function normalizeCourse(raw, periods) {
     let end = normalizeTime(item.end_time || item.end || item.finish)
         || (slot ? normalizeTime(slot.end_time) : '')
         || plusMinutes(start, 45);
-    if (timeToMinutes(end) <= timeToMinutes(start)) end = plusMinutes(start, 45);
+    let crossMidnight = false;
+    if (timeToMinutes(end) <= timeToMinutes(start)) {
+        // 下课时间早于上课时间：可能是跨午夜（23:00–01:00）或源数据写错。
+        // 课表暂不支持跨午夜，留标记给导入页明确提示，不再静默改成 45 分钟。
+        crossMidnight = Boolean(item.end_time) && timeToMinutes(normalizeTime(item.end_time)) >= 0;
+        end = plusMinutes(start, 45);
+    }
     return {
         title: title,
         teacher: trimText(item.teacher || item.teacherName || embeddedTeacher || '', 60),
@@ -141,6 +163,7 @@ function normalizeCourse(raw, periods) {
         note: trimText(item.note || item.remark || '', NOTE_MAX_LENGTH),
         remind: true,
         lead_minutes: 15,
+        crossMidnight: crossMidnight,
     };
 }
 
@@ -339,12 +362,34 @@ function decodeXml(value) {
         .replace(/&amp;/g, '&');
 }
 
+// CSV 分隔符不一定是逗号：Excel 中文环境常导出分号，网页复制常是 Tab。
+// 按首行（引号外）出现次数最多的候选符号自动识别。
+function detectDelimiter(source) {
+    const line = String(source || '').split(/\r?\n/).find(item => item.trim()) || '';
+    const counts = { ',': 0, ';': 0, '\t': 0, '|': 0 };
+    let quoted = false;
+    for (let i = 0; i < line.length; i += 1) {
+        const ch = line[i];
+        if (ch === '"') {
+            quoted = !quoted;
+            continue;
+        }
+        if (!quoted && Object.prototype.hasOwnProperty.call(counts, ch)) counts[ch] += 1;
+    }
+    let best = ',';
+    Object.keys(counts).forEach((key) => {
+        if (counts[key] > counts[best]) best = key;
+    });
+    return best;
+}
+
 function parseCsv(text) {
     const rows = [];
     let row = [];
     let field = '';
     let quoted = false;
     const source = String(text || '').replace(/^\uFEFF/, '');
+    const delimiter = detectDelimiter(source);
     for (let i = 0; i < source.length; i += 1) {
         const ch = source[i];
         if (quoted) {
@@ -358,7 +403,7 @@ function parseCsv(text) {
             }
         } else if (ch === '"') {
             quoted = true;
-        } else if (ch === ',') {
+        } else if (ch === delimiter) {
             row.push(field);
             field = '';
         } else if (ch === '\n' || ch === '\r') {
@@ -460,38 +505,71 @@ function unzipAsync(fs, zipFilePath, targetPath) {
     });
 }
 
+// 小程序临时目录不会自动回收：每次导入都清掉本次的 zip / 解压目录，
+// 顺带清理历史遗留的 wb-import-* 文件，避免越积越多占满 USER_DATA_PATH。
+function removeTemp(fs, zipPath, targetPath) {
+    try {
+        if (typeof fs.unlinkSync === 'function') fs.unlinkSync(zipPath);
+    } catch (error) { /* 已被清理 */ }
+    try {
+        if (typeof fs.rmdirSync === 'function') fs.rmdirSync(targetPath, true);
+    } catch (error) {
+        try { fs.rmdirSync(targetPath); } catch (ignored) { /* 目录不存在 */ }
+    }
+}
+
+function cleanupOldTemps(fs, base) {
+    try {
+        if (typeof fs.readdirSync !== 'function') return;
+        fs.readdirSync(base).forEach((name) => {
+            if (String(name).indexOf('wb-import-') !== 0) return;
+            const full = base + '/' + name;
+            try {
+                if (/\.zip$/.test(name) && typeof fs.unlinkSync === 'function') fs.unlinkSync(full);
+                else if (typeof fs.rmdirSync === 'function') fs.rmdirSync(full, true);
+            } catch (error) { /* 单个文件清理失败不影响导入 */ }
+        });
+    } catch (error) { /* readdir 不支持时跳过 */ }
+}
+
 async function readXlsx(tempPath) {
     const fs = wx.getFileSystemManager();
     const base = (wx.env && wx.env.USER_DATA_PATH) || 'wxfile://usr';
     const stamp = Date.now() + '-' + Math.floor(Math.random() * 10000);
     const zipPath = base + '/wb-import-' + stamp + '.zip';
     const targetPath = base + '/wb-import-' + stamp;
-    fs.copyFileSync(tempPath, zipPath);
-    await unzipAsync(fs, zipPath, targetPath);
-    let shared = [];
+    cleanupOldTemps(fs, base);
     try {
-        shared = parseSharedStrings(readUtf8(targetPath + '/xl/sharedStrings.xml'));
-    } catch (error) {
-        shared = [];
+        fs.copyFileSync(tempPath, zipPath);
+        await unzipAsync(fs, zipPath, targetPath);
+        let shared = [];
+        try {
+            shared = parseSharedStrings(readUtf8(targetPath + '/xl/sharedStrings.xml'));
+        } catch (error) {
+            shared = [];
+        }
+        let sheetPath = targetPath + '/xl/worksheets/sheet1.xml';
+        try {
+            fs.accessSync(sheetPath);
+        } catch (error) {
+            sheetPath = targetPath + '/xl/worksheets/sheet.xml';
+        }
+        const xml = readUtf8(sheetPath);
+        return parseSheet(xml, shared);
+    } finally {
+        removeTemp(fs, zipPath, targetPath);
     }
-    let sheetPath = targetPath + '/xl/worksheets/sheet1.xml';
-    try {
-        fs.accessSync(sheetPath);
-    } catch (error) {
-        sheetPath = targetPath + '/xl/worksheets/sheet.xml';
-    }
-    const xml = readUtf8(sheetPath);
-    return parseSheet(xml, shared);
 }
 
 const HEADER_ALIASES = {
     title: ['课程', '课程名称', '科目', '课名', '名称', 'course', 'title', 'subject', 'name'],
-    day_of_week: ['星期', '周几', '周次', '天', 'day', 'weekday', '日期'],
+    day_of_week: ['星期', '周几', '天', 'day', 'weekday', '日期'],
     start_time: ['开始', '开始时间', '上课时间', '起始', 'start', 'begin'],
     end_time: ['结束', '结束时间', '下课时间', 'end', 'finish'],
     teacher: ['教师', '老师', '授课教师', 'teacher'],
     location: ['地点', '教室', '上课地点', 'room', 'location', 'place'],
-    week_type: ['单双周', '周次类型', '单周', 'weektype', 'weeks'],
+    // 「周次」是单双周 / 教学周，不是星期几；以前放在 day_of_week 里会把整列日期读成星期
+    week_type: ['单双周', '周次类型', '周次', '单周', 'weektype', 'weeks'],
     note: ['备注', '说明', 'note', 'remark'],
 };
 
@@ -520,17 +598,30 @@ function splitCellContent(value) {
     let title = lines[0] || '';
     let teacher = '';
     let location = '';
+    // 「单周 / 双周 / 单双周」常单独占一行，是周次标记，不能当成教师名
+    let weekText = '';
+    const rest = lines.slice(1).filter((line) => {
+        if (/(单双周|单周|双周|每周)/.test(line)) {
+            if (!weekText) weekText = line;
+            return false;
+        }
+        return true;
+    });
     // 「数学（牛利）」这类单格写法：括号里是教师名
     const bracket = title.match(/^([\s\S]+?)[（(]([^()（）]{1,20})[)）]\s*$/);
     if (bracket) {
-        title = bracket[1].trim();
-        teacher = bracket[2].trim();
+        if (/(单双周|单周|双周|每周)/.test(bracket[2])) {
+            weekText = bracket[2];
+        } else {
+            title = bracket[1].trim();
+            teacher = bracket[2].trim();
+        }
     }
-    lines.slice(1).forEach((line) => {
+    rest.forEach((line) => {
         if (/楼|室|场|校区|教室|机房|实验室|操场|\d{3,}/.test(line) && !location) location = line;
         else if (!teacher) teacher = line;
     });
-    return { title: title, teacher: teacher, location: location };
+    return { title: title, teacher: teacher, location: location, weekText: weekText };
 }
 
 function rowsToCourses(rows, periods) {
@@ -547,16 +638,25 @@ function rowsToCourses(rows, periods) {
     // 矩阵式课程表：表头是周一~周日，每行是一个节次
     if (dayColumns.length >= 2) {
         const result = [];
+        // 独立递增的节次游标：午休 / 大课间这类合并行不占号，避免后面所有课错位。
+        // 显式写「第N节」优先；写了时间段则按开始时间匹配作息；都没有才顺延。
+        let periodCursor = 0;
         for (let r = 1; r < source.length; r += 1) {
             const row = source[r];
             const first = String(row[0] || '').trim();
             const hasTime = /\d{1,2}\s*[:：]\s*\d{2}/.test(first);
             const periodMatch = first.match(/第\s*(\d+)\s*节/);
-            // 「晨读 / 大课间 / 午休」这类合并行不是课程，跳过，避免节次错位
             if (!hasTime && !periodMatch && /^(晨读|早读|大课间|午休|上午|下午|时间|节次)/.test(first)) continue;
-            const periodNo = periodMatch
-                ? Math.min(slots.length, Math.max(1, Number(periodMatch[1])))
-                : Math.min(slots.length, Math.max(1, r));
+            const firstRange = hasTime ? parseTimeRange(first, periodCursor) : null;
+            const matchedSlot = firstRange
+                ? slots.findIndex(item => item.start_time === firstRange.start_time)
+                : -1;
+            let periodNo;
+            if (periodMatch) periodNo = Number(periodMatch[1]);
+            else if (matchedSlot >= 0) periodNo = slots[matchedSlot].sort_no;
+            else periodNo = periodCursor + 1;
+            periodNo = Math.min(slots.length, Math.max(1, periodNo));
+            periodCursor = periodNo;
             const slot = slots[periodNo - 1] || null;
             const range = parseTimeRange(first, Math.min(periodNo - 1, DEFAULT_PERIODS.length - 1));
             if (slot) {
@@ -575,7 +675,7 @@ function rowsToCourses(rows, periods) {
                     period_no: periodNo,
                     start_time: range.start_time,
                     end_time: range.end_time,
-                    week_type: /单周/.test(raw) ? 'odd' : /双周/.test(raw) ? 'even' : 'all',
+                    week_type: parts.weekText,
                     note: '',
                 }, slots);
                 if (course) result.push(course);
@@ -647,6 +747,10 @@ module.exports = {
     rowsToCourses,
     normalizeCourse,
     normalizeTime,
+    parseWeekType,
+    resolveWeekInfo,
+    detectDelimiter,
+    splitCellContent,
     extractJson,
     repairPeriods,
     spreadSameSlot,

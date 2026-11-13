@@ -67,8 +67,9 @@ function weekOffset(date, termStart) {
     return Math.floor(diffDays(mondayOf(date), mondayOf(base)) / 7);
 }
 
+// 学期开始前返回 0，由调用方显示「未开学」，避免出现「第 -2 周」。
 function weekNumber(date, termStart) {
-    return weekOffset(date, termStart) + 1;
+    return Math.max(0, weekOffset(date, termStart) + 1);
 }
 
 function parityOf(date, termStart) {
@@ -106,17 +107,18 @@ function isValidTime(value) {
     return /^(\d|0\d|1\d|2[0-3]):[0-5]\d$/.test(String(value || '').trim());
 }
 
-// 宽松时间归一化：接受 8:5、8：40、"8: 40"、08:40 等手写格式，统一成 HH:MM。
-// 解析不了时返回空字符串，由调用方决定保留原值还是给出提示。
+// 全项目唯一的时间归一化入口：接受 8:5、8：40、"8: 40"、08:40、0800 等手写格式，
+// 统一成 HH:MM；越界或格式非法一律返回空字符串，由调用方决定提示还是用默认值。
 function normalizeTime(value) {
     const raw = String(value === undefined || value === null ? '' : value)
         .replace(/[：]/g, ':')
         .replace(/\s+/g, '')
         .trim();
     const match = raw.match(/^(\d{1,2}):(\d{1,2})$/);
-    if (!match) return '';
-    const h = Number(match[1]);
-    const m = Number(match[2]);
+    const compact = match ? null : raw.match(/^(\d{2})(\d{2})$/);
+    const h = Number((match || compact || [])[1]);
+    const m = Number((match || compact || [])[2]);
+    if (!match && !compact) return '';
     if (h > 23 || m > 59) return '';
     return pad2(h) + ':' + pad2(m);
 }

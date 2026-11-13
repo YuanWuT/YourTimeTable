@@ -180,7 +180,18 @@ async function getSettings() {
     }
 }
 
-async function saveSettings(patch) {
+// read-modify-write 不是原子操作：快速连点开关 / 日期会互相覆盖。
+// 用串行队列保证每次写入都基于上一次写完的最新值。
+let settingsWriteQueue = Promise.resolve();
+
+function saveSettings(patch) {
+    const run = () => saveSettingsOnce(patch);
+    const result = settingsWriteQueue.then(run, run);
+    settingsWriteQueue = result.catch(() => null);
+    return result;
+}
+
+async function saveSettingsOnce(patch) {
     try {
         const current = await getSettings();
         if (current.error) return current;
@@ -341,7 +352,10 @@ async function createCoursesBatch(list) {
             .insert(rows)
             .select(COURSE_COLUMNS.join(','));
         if (result.error) return fail(result.error);
-        return ok((result.data || []).map(courseFromRow));
+        if (!result.data || result.data.length === 0) {
+            return fail({ code: 'WRITE_BLOCKED', message: '没有课程写入成功，请检查登录状态后重试' });
+        }
+        return ok(result.data.map(courseFromRow));
     } catch (error) {
         return fail(clientError(error));
     }
@@ -352,14 +366,19 @@ async function listPeriods() {
     if (result.error) return result;
     const data = result.data || [];
     if (data.length > 0) return ok(normalizePeriods(data));
-    // 首次使用：写入一套可手动修改的默认作息，之后完全由用户编辑
+    // 首次使用：写入一套可手动修改的默认作息，之后完全由用户编辑。
+    // 写入失败必须如实返回 error：以前返回 10 节「假数据」会让页面以为已保存，
+    // 云端其实一行都没有，后续 replacePeriods 还会重复创建。
     const rows = DEFAULT_PERIODS.map((period, index) => periodToRow(Object.assign({ sort_no: index + 1 }, period)));
     try {
         const inserted = await cloud.database.from('periods').insert(rows).select(PERIOD_COLUMNS.join(','));
-        if (inserted.error) return ok(normalizePeriods([]));
-        return ok(normalizePeriods(inserted.data || []));
+        if (inserted.error) return fail(inserted.error);
+        if (!inserted.data || inserted.data.length === 0) {
+            return fail({ code: 'WRITE_BLOCKED', message: '作息时间没有保存成功，请检查登录状态后重试' });
+        }
+        return ok(normalizePeriods(inserted.data));
     } catch (error) {
-        return ok(normalizePeriods([]));
+        return fail(clientError(error));
     }
 }
 
@@ -407,7 +426,18 @@ async function clampCoursePeriods(periods) {
     }
 }
 
-async function replacePeriods(list) {
+// 作息保存是多条写入：设置页连续点「新增 / 删除 / 快捷设节数」时，
+// 两次替换若交叉执行会留下半套节次，这里统一串行。
+let periodsWriteQueue = Promise.resolve();
+
+function replacePeriods(list) {
+    const run = () => replacePeriodsOnce(list);
+    const result = periodsWriteQueue.then(run, run);
+    periodsWriteQueue = result.catch(() => null);
+    return result;
+}
+
+async function replacePeriodsOnce(list) {
     try {
         const current = await periodsAccess.list();
         if (current.error) return current;
@@ -415,26 +445,43 @@ async function replacePeriods(list) {
         // 统一用字符串比较：云端 id 可能是数字，也可能被序列化成字符串，
         // 类型不一致会把「刚更新过的行」误判成待删除行。
         const keepIds = [];
+        const errors = [];
         for (let i = 0; i < (list || []).length; i += 1) {
             const item = list[i];
             const row = periodToRow(Object.assign({}, item, { sort_no: i + 1 }));
             const id = idOf(item.id);
             if (id !== null) {
-                keepIds.push(String(id));
                 const updated = await periodsAccess.update(id, row);
-                if (updated.error) return updated;
+                if (updated.error) {
+                    // 这一行可能已被另一台设备 / 上一次替换删掉：按新行补建，
+                    // 避免整套作息缺一节，也避免把陈旧 id 报成保存失败。
+                    const rebuilt = await periodsAccess.create(row);
+                    if (rebuilt.error) errors.push(rebuilt.error);
+                    else if (rebuilt.data && rebuilt.data.id !== undefined) keepIds.push(String(idOf(rebuilt.data.id)));
+                } else {
+                    keepIds.push(String(id));
+                }
             } else {
                 const created = await periodsAccess.create(row);
-                if (created.error) return created;
-                if (created.data && created.data.id !== undefined) keepIds.push(String(idOf(created.data.id)));
+                if (created.error) errors.push(created.error);
+                else if (created.data && created.data.id !== undefined) keepIds.push(String(idOf(created.data.id)));
             }
         }
         const removed = existing.filter(item => keepIds.indexOf(String(item.id)) < 0);
         for (let i = 0; i < removed.length; i += 1) {
-            await periodsAccess.remove(removed[i].id);
+            const deleted = await periodsAccess.remove(removed[i].id);
+            if (deleted.error) errors.push(deleted.error);
         }
+        // 不中途 return：尽量把整套作息写完再如实报错，避免留下半套数据
         const saved = await listPeriods();
         if (!saved.error) await clampCoursePeriods(saved.data || []);
+        if (errors.length > 0) {
+            return fail({
+                code: 'PARTIAL_SAVE',
+                message: '有 ' + errors.length + ' 个节次没保存成功（'
+                    + ((errors[0] && errors[0].message) || '请重试') + '），请重新打开本页核对',
+            });
+        }
         return saved;
     } catch (error) {
         return fail(clientError(error));
@@ -445,8 +492,21 @@ function createImport(record) {
     return importsAccess.create(record);
 }
 
-function listImports() {
-    return importsAccess.list();
+// 导入记录会越积越多：首屏只取最近 100 条，避免每次进页面都拉全表。
+async function listImports(limit) {
+    try {
+        let query = cloud.database.from('imports')
+            .select(IMPORT_COLUMNS.join(','))
+            .order('created_at', { ascending: false });
+        if (typeof query.limit === 'function') {
+            query = query.limit(Math.min(200, Math.max(1, Number(limit) || 100)));
+        }
+        const result = await query;
+        if (result && result.error) return fail(result.error);
+        return ok((result && Array.isArray(result.data)) ? result.data : []);
+    } catch (error) {
+        return fail(clientError(error));
+    }
 }
 
 // 把导入的原始文件存到当前用户自己的云存储目录，供日后追溯。

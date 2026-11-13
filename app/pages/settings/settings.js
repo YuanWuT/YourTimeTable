@@ -11,6 +11,8 @@ Page({
         loading: true,
         saving: false,
         errorText: '',
+        today: S.formatDate(new Date()),
+        savingSettings: false,
         termStart: '',
         periods: [],
         remindEnabled: true,
@@ -75,17 +77,34 @@ Page({
         } catch (error) {
             subscribeStatus = '未开启';
         }
+        // 真实数据里出现过 9 节作息、非标准提前量；选项里没有时动态补进去，
+        // 否则 indexOf 返回 -1 被兜成第 0 项，界面会显示一个跟云端不一致的值。
+        const leadValue = Number(settings.default_lead);
+        const leadOptions = LEAD_OPTIONS.slice();
+        if (leadOptions.indexOf(leadValue) < 0) {
+            leadOptions.push(leadValue);
+            leadOptions.sort((a, b) => a - b);
+        }
+        const countOptions = PERIOD_COUNT_OPTIONS.slice();
+        if (countOptions.indexOf(periods.length) < 0) {
+            countOptions.push(periods.length);
+            countOptions.sort((a, b) => a - b);
+        }
         this.setData({
             loading: false,
             errorText: '',
             termStart: settings.term_start,
             periods: periods.map(item => Object.assign({}, item)),
             remindEnabled: settings.remind_enabled,
-            leadIndex: Math.max(0, LEAD_OPTIONS.indexOf(Number(settings.default_lead))),
+            leadOptions: leadOptions,
+            leadLabels: leadOptions.map(value => value === 0 ? '上课时提醒' : '提前 ' + value + ' 分钟'),
+            leadIndex: Math.max(0, leadOptions.indexOf(leadValue)),
             templatesReady: reminder.templatesReady(),
             subscribeStatus: subscribeStatus,
             courseCount: courses.length,
-            periodCountIndex: Math.max(0, PERIOD_COUNT_OPTIONS.indexOf(periods.length)),
+            periodCountOptions: countOptions,
+            periodCountLabels: countOptions.map(n => n + ' 节'),
+            periodCountIndex: Math.max(0, countOptions.indexOf(periods.length)),
         });
         if (this.focusPeriods) {
             this.focusPeriods = false;
@@ -97,10 +116,35 @@ Page({
         }
     },
 
-    async saveSettings(patch) {
-        const result = await store.saveSettings(patch);
+    snapshot() {
+        return {
+            termStart: this.data.termStart,
+            remindEnabled: this.data.remindEnabled,
+            leadIndex: this.data.leadIndex,
+        };
+    },
+
+    async saveSettings(patch, before) {
+        if (this.data.savingSettings) {
+            wx.showToast({ title: '正在保存，请稍候', icon: 'none' });
+            return false;
+        }
+        // 快照必须由调用方在乐观更新「之前」取，否则回滚到的是已经改过的值
+        const snapshot = before || this.snapshot();
+        this.setData({ savingSettings: true });
+        let result;
+        try {
+            result = await store.saveSettings(patch);
+        } catch (error) {
+            result = { error: { message: (error && error.message) || '保存失败' } };
+        } finally {
+            this.setData({ savingSettings: false });
+        }
         if (result.error) {
-            this.setData({ errorText: result.error.message || '保存失败' });
+            this.setData(Object.assign({}, snapshot, {
+                errorText: (result.error.message || '保存失败') + '，已恢复原来的设置',
+            }));
+            wx.showToast({ title: '保存失败，已恢复原设置', icon: 'none' });
             return false;
         }
         this.settings = result.data;
@@ -109,19 +153,23 @@ Page({
     },
 
     async onTermStartChange(event) {
+        const before = this.snapshot();
         this.setData({ termStart: event.detail.value, errorText: '' });
-        await this.saveSettings({ term_start: event.detail.value });
+        await this.saveSettings({ term_start: event.detail.value }, before);
     },
 
     async onRemindChange(event) {
+        const before = this.snapshot();
         this.setData({ remindEnabled: event.detail.value, errorText: '' });
-        await this.saveSettings({ remind_enabled: event.detail.value });
+        await this.saveSettings({ remind_enabled: event.detail.value }, before);
     },
 
     async onLeadChange(event) {
         const index = Number(event.detail.value) || 0;
+        const options = this.data.leadOptions || LEAD_OPTIONS;
+        const before = this.snapshot();
         this.setData({ leadIndex: index, errorText: '' });
-        await this.saveSettings({ default_lead: LEAD_OPTIONS[index] });
+        await this.saveSettings({ default_lead: options[index] }, before);
     },
 
     onPeriodInput(event) {
@@ -170,9 +218,16 @@ Page({
             return;
         }
         const saved = (result.data || []).map(item => Object.assign({}, item));
+        const countOptions = (this.data.periodCountOptions || PERIOD_COUNT_OPTIONS).slice();
+        if (countOptions.indexOf(saved.length) < 0) {
+            countOptions.push(saved.length);
+            countOptions.sort((a, b) => a - b);
+        }
         this.setData({
             periods: saved,
-            periodCountIndex: Math.max(0, PERIOD_COUNT_OPTIONS.indexOf(saved.length)),
+            periodCountOptions: countOptions,
+            periodCountLabels: countOptions.map(n => n + ' 节'),
+            periodCountIndex: Math.max(0, countOptions.indexOf(saved.length)),
         });
         wx.showToast({ title: successText, icon: 'success' });
     },
@@ -193,7 +248,8 @@ Page({
 
     async onQuickCountChange(event) {
         const index = Number(event.detail.value) || 0;
-        const target = PERIOD_COUNT_OPTIONS[index];
+        const options = this.data.periodCountOptions || PERIOD_COUNT_OPTIONS;
+        const target = options[index];
         if (!target) return;
         const periods = this.data.periods.slice();
         if (target > periods.length) {
@@ -246,7 +302,18 @@ Page({
             this.setData({ errorText: result.error.message || '保存作息失败' });
             return;
         }
-        this.setData({ periods: (result.data || []).map(item => Object.assign({}, item)) });
+        const saved = (result.data || []).map(item => Object.assign({}, item));
+        const countOptions = (this.data.periodCountOptions || PERIOD_COUNT_OPTIONS).slice();
+        if (countOptions.indexOf(saved.length) < 0) {
+            countOptions.push(saved.length);
+            countOptions.sort((a, b) => a - b);
+        }
+        this.setData({
+            periods: saved,
+            periodCountOptions: countOptions,
+            periodCountLabels: countOptions.map(n => n + ' 节'),
+            periodCountIndex: Math.max(0, countOptions.indexOf(saved.length)),
+        });
         wx.showToast({ title: '作息时间已保存', icon: 'success' });
     },
 

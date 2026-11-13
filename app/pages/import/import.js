@@ -10,6 +10,13 @@ const ENTRIES = [
     { key: 'text', icon: '📋', title: '粘贴文字', desc: '把课表文字粘贴进来自动整理', tag: 'AI 整理' },
 ];
 
+const SOURCE_TITLES = {
+    photo: '照片识别',
+    excel: '表格导入',
+    text: '文字整理',
+    manual: '手动录入',
+};
+
 // 微信底层失败信息形如 "chooseMessageFile:fail cancel"，不能直接展示给用户。
 // 统一翻译成中文，并把「用户主动取消」单独标记，避免当成故障反复弹卡片。
 function friendlyPickError(raw, fallback) {
@@ -102,9 +109,10 @@ function pickFile() {
     });
 }
 
-function extensionOf(path) {
+function extensionOf(path, fallback) {
     const match = String(path || '').toLowerCase().match(/\.([a-z0-9]+)$/);
-    return match ? match[1] : 'bin';
+    // 微信临时图片路径常不带扩展名，按来源补 jpg / xlsx，别再一律存成 .bin
+    return match ? match[1] : (fallback || 'bin');
 }
 
 function mimeOf(extension) {
@@ -126,6 +134,7 @@ Page({
         reviewVisible: false,
         reviewCourses: [],
         reviewSource: '',
+        reviewSourceKey: '',
         selectedCount: 0,
         importing: false,
         fileName: '',
@@ -200,6 +209,7 @@ Page({
         this.showError((error && error.message) || fallback);
     },
 
+    // 只在「确认导入」成功后调用，row_count 取云端实际写入条数，不再提前记识别条数
     async saveSourceRecord(source, fileName, storagePath, rowCount) {
         const result = await store.createImport({
             source: source,
@@ -211,17 +221,23 @@ Page({
         if (result.error) console.warn('[import] record not saved');
     },
 
-    async uploadBestEffort(path, name) {
+    async uploadBestEffort(path, name, fallbackExt) {
+        const hint = '原文件未能存云端（不影响导入）';
         try {
-            const ext = extensionOf(name || path);
+            const ext = extensionOf(name || path, fallbackExt);
             const result = await store.uploadImportFile(path, ext, mimeOf(ext), this.session);
-            return result.error ? '' : result.data;
+            if (result.error) {
+                wx.showToast({ title: hint, icon: 'none', duration: 2200 });
+                return '';
+            }
+            return result.data || '';
         } catch (error) {
+            wx.showToast({ title: hint, icon: 'none', duration: 2200 });
             return '';
         }
     },
 
-    showReview(courses, source, fileName, storagePath) {
+    showReview(courses, sourceKey, fileName, storagePath) {
         const styled = S.styledCourses(courses).map((course, index) => Object.assign({}, course, {
             id: course.id || 'review-' + index,
             checked: true,
@@ -232,7 +248,8 @@ Page({
             errorText: '',
             reviewVisible: true,
             reviewCourses: styled,
-            reviewSource: source,
+            reviewSource: SOURCE_TITLES[sourceKey] || '课程导入',
+            reviewSourceKey: sourceKey || 'manual',
             selectedCount: styled.length,
             fileName: fileName || '',
             storagePath: storagePath || '',
@@ -256,15 +273,22 @@ Page({
             this.setData({ busy: true, busyText: '正在选择图片…' });
             try {
                 const picked = await pickImage();
+                // chooseImage 降级分支拿不到 size，用文件系统兜底，避免绕过 8MB 限制
+                if (!picked.size) {
+                    try {
+                        const stat = wx.getFileSystemManager().statSync(picked.path);
+                        picked.size = (stat && stat.size) || 0;
+                    } catch (error) { /* 环境不支持 statSync 时跳过大小校验 */ }
+                }
                 if (picked.size > 8 * 1024 * 1024) {
                     this.showError('图片太大（超过 8MB），请压缩后再试');
                     return;
                 }
                 this.setData({ busyText: '正在识别课程表，请稍候…' });
-                const ext = extensionOf(picked.path);
+                const ext = extensionOf(picked.path, 'jpg');
                 const fs = wx.getFileSystemManager();
                 const base64 = fs.readFileSync(picked.path, 'base64');
-                const storagePath = await this.uploadBestEffort(picked.path, picked.path);
+                const storagePath = await this.uploadBestEffort(picked.path, picked.path, ext);
                 const result = await importer.llmExtract({
                     imageBase64: base64,
                     imageMime: ext === 'png' ? 'image/png' : 'image/jpeg',
@@ -274,8 +298,7 @@ Page({
                     this.showError(result.error.message);
                     return;
                 }
-                await this.saveSourceRecord('photo', '课表照片.' + ext, storagePath, result.data.length);
-                this.showReview(result.data, '照片识别', '课表照片.' + ext, storagePath);
+                this.showReview(result.data, 'photo', '课表照片.' + ext, storagePath);
             } catch (error) {
                 this.handlePickFailure(error, '照片读取失败，请重试');
             }
@@ -292,8 +315,7 @@ Page({
                     return;
                 }
                 const storagePath = await this.uploadBestEffort(picked.path, picked.name);
-                await this.saveSourceRecord('excel', picked.name, storagePath, result.data.length);
-                this.showReview(result.data, '表格导入', picked.name, storagePath);
+                this.showReview(result.data, 'excel', picked.name, storagePath);
             } catch (error) {
                 this.handlePickFailure(error, '文件读取失败，请重试');
             }
@@ -321,8 +343,7 @@ Page({
             this.showError(result.error.message);
             return;
         }
-        await this.saveSourceRecord('text', '粘贴文字', '', result.data.length);
-        this.showReview(result.data, '文字整理', '粘贴文字', '');
+        this.showReview(result.data, 'text', '粘贴文字', '');
     },
 
     toggleReviewItem(event) {
@@ -357,6 +378,22 @@ Page({
             return;
         }
         if (this.data.importing) return;
+        // 跨午夜课程（如 23:00–01:00）暂不支持：以前会被静默改成 45 分钟，
+        // 现在先明确告知，避免课表看起来正常、实际时间却被改掉。
+        const overnight = selected.filter(item => item.crossMidnight);
+        if (overnight.length > 0) {
+            const keepGoing = await new Promise((resolve) => {
+                wx.showModal({
+                    title: '有跨午夜课程',
+                    content: '发现 ' + overnight.length + ' 节课的下课时间早于上课时间。课表暂不支持跨午夜，导入后会按 45 分钟处理，建议导入后手动调整。仍要导入吗？',
+                    confirmText: '仍然导入',
+                    cancelText: '先不导入',
+                    success: res => resolve(Boolean(res.confirm)),
+                    fail: () => resolve(false),
+                });
+            });
+            if (!keepGoing) return;
+        }
         this.setData({ importing: true, errorText: '' });
 
         // 1) 时间先按作息节次收敛，再去掉本次结果里「同名同天同时间段」的重复项
@@ -428,6 +465,14 @@ Page({
             this.showError(result.error.message || '导入失败，请稍后重试');
             return;
         }
+        // 只有真正写入云端才记一条记录，条数取云端实际入库数；
+        // 取消勾选 / 放弃本次结果不会留下导入历史。
+        await this.saveSourceRecord(
+            this.data.reviewSourceKey || 'manual',
+            this.data.fileName,
+            this.data.storagePath,
+            (result.data || []).length,
+        );
         wx.showToast({
             title: '已导入 ' + result.data.length + ' 节' + (skipped > 0 ? '，跳过 ' + skipped + ' 节重复' : ''),
             icon: 'none',
@@ -463,7 +508,12 @@ Page({
                 wx.shareFileMessage({
                     filePath: filePath,
                     fileName: config.fileName,
-                    success: () => wx.showToast({ title: '模板已发送到聊天', icon: 'success' }),
+                    success: () => wx.showModal({
+                        title: '模板已发送到聊天',
+                        content: '用 Excel / WPS 打开聊天里的模板，填好课程后发回微信，再回到本页点「Excel / CSV 表格」选择导入。\n\n表头：' + template.SINGLE_HEADERS.join('、'),
+                        showCancel: false,
+                        confirmText: '我知道了',
+                    }),
                     fail: (error) => {
                         // 用户主动取消转发就不要再弹预览，避免打扰
                         if (error && /cancel/i.test(String(error.errMsg || ''))) return;

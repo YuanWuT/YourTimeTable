@@ -107,10 +107,14 @@ function createTableAccess(cloud, options) {
                     .insert(row)
                     .select(selectedColumns);
                 const rows = asRows(result && result.data);
-                return {
-                    data: rows.length > 0 ? fromRow(rows[0]) : null,
-                    error: result ? result.error : null,
-                };
+                // insert 成功但 select 回 0 行（权限 / RLS 拦截）不能当成「已保存」
+                if (rows.length === 0) {
+                    return {
+                        data: null,
+                        error: (result && result.error) ? result.error : NOT_FOUND_OR_FORBIDDEN_ERROR,
+                    };
+                }
+                return { data: fromRow(rows[0]), error: null };
             });
         },
 

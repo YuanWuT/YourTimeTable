@@ -3,6 +3,12 @@ const store = require('../../utils/store');
 const S = require('../../utils/schedule');
 
 const LEAD_OPTIONS = [0, 5, 10, 15, 20, 30, 45, 60];
+// 编辑态只回填业务字段：id / deleted / deleted_at / role / created_at 是云端元数据，
+// 整包回写会把软删除标记等一起写回去。
+const FORM_FIELDS = [
+    'title', 'teacher', 'location', 'day_of_week', 'period_no',
+    'start_time', 'end_time', 'week_type', 'color', 'note', 'remind', 'lead_minutes',
+];
 const WEEK_TYPES = [
     { key: 'all', name: '每周' },
     { key: 'odd', name: '仅单周' },
@@ -71,7 +77,7 @@ Page({
         periodIndex: 0,
         weekTypes: WEEK_TYPES,
         colors: COURSE_COLORS,
-        leadOptions: LEAD_OPTIONS,
+        leadOptions: LEAD_OPTIONS.slice(),
         leadLabels: LEAD_OPTIONS.map(value => value === 0 ? '上课时提醒' : '提前 ' + value + ' 分钟'),
         leadIndex: 3,
         deletedCount: 0,
@@ -146,7 +152,10 @@ Page({
                 this.setData({ loading: false, errorText: '这条课程不存在或已被删除' });
                 return;
             }
-            form = Object.assign(emptyForm(), found);
+            form = Object.assign(emptyForm(), FORM_FIELDS.reduce((acc, key) => {
+                if (found[key] !== undefined) acc[key] = found[key];
+                return acc;
+            }, {}));
         } else {
             if (this.presetDay >= 1 && this.presetDay <= 7) form.day_of_week = this.presetDay;
             if (this.presetPeriod > 0) {
@@ -158,7 +167,13 @@ Page({
                 }
             }
         }
-        const leadIndex = Math.max(0, LEAD_OPTIONS.indexOf(Number(form.lead_minutes)));
+        const leadValue = Number(form.lead_minutes);
+        const leadOptions = LEAD_OPTIONS.slice();
+        if (leadOptions.indexOf(leadValue) < 0) {
+            leadOptions.push(leadValue);
+            leadOptions.sort((a, b) => a - b);
+        }
+        const leadIndex = Math.max(0, leadOptions.indexOf(leadValue));
         // 历史数据里可能有更长的备注，编辑时也统一收到上限，避免课表格子被撑乱。
         form.note = String(form.note || '').slice(0, NOTE_MAX_LENGTH);
         const colors = COURSE_COLORS.map(item => Object.assign({}, item, { selected: item.key === form.color }));
@@ -174,6 +189,8 @@ Page({
             periodIndex: Number(form.period_no) > 0 && foundIndex >= 0 ? foundIndex + 1 : 0,
             colors: colors,
             weekTypes: weekTypes,
+            leadOptions: leadOptions,
+            leadLabels: leadOptions.map(value => value === 0 ? '上课时提醒' : '提前 ' + value + ' 分钟'),
             leadIndex: leadIndex,
             deletedCount: (deletedResult.data || []).length,
         }, timeState(form)));
@@ -188,11 +205,7 @@ Page({
         form[field] = value;
         const patch = { form: form, errorText: '' };
         if (field === 'note') patch.noteLength = String(value).length;
-        // 手动改过时间后就不再按旧节次定位，否则课表会把课程放回原来的节次行
-        if ((field === 'start_time' || field === 'end_time') && this.data.periodIndex !== 0) {
-            form.period_no = 0;
-            patch.periodIndex = 0;
-        }
+        // 时间已改用 picker，输入框不再接收 start_time / end_time，删掉失效的节次重置分支
         this.setData(patch);
     },
 
@@ -266,9 +279,10 @@ Page({
 
     onLeadChange(event) {
         const index = Number(event.detail.value) || 0;
+        const options = this.data.leadOptions || LEAD_OPTIONS;
         this.setData({
             leadIndex: index,
-            form: Object.assign({}, this.data.form, { lead_minutes: LEAD_OPTIONS[index] }),
+            form: Object.assign({}, this.data.form, { lead_minutes: options[index] }),
         });
     },
 
@@ -276,7 +290,9 @@ Page({
         if (!String(form.title || '').trim()) return '请填写课程名称';
         if (!S.isValidTime(form.start_time)) return '开始时间无效，请重新按小时、分钟选择';
         if (!S.isValidTime(form.end_time)) return '结束时间无效，请重新按小时、分钟选择';
-        if (S.timeToMinutes(form.end_time) <= S.timeToMinutes(form.start_time)) return '结束时间要晚于开始时间';
+        if (S.timeToMinutes(form.end_time) <= S.timeToMinutes(form.start_time)) {
+            return '结束时间要晚于开始时间（暂不支持跨午夜课程）';
+        }
         return '';
     },
 
@@ -331,11 +347,16 @@ Page({
             return;
         }
         this.setData({ form: finalForm, saving: true, errorText: '' });
+        // 只提交业务字段，杜绝把 id / deleted / deleted_at 等云端元数据整体回写
+        const payload = FORM_FIELDS.reduce((acc, key) => {
+            if (finalForm[key] !== undefined) acc[key] = finalForm[key];
+            return acc;
+        }, {});
         let result;
         try {
             result = this.courseId
-                ? await store.updateCourse(this.courseId, finalForm)
-                : await store.createCourse(finalForm);
+                ? await store.updateCourse(this.courseId, payload)
+                : await store.createCourse(payload);
         } catch (error) {
             result = { error: { message: (error && error.message) || '保存失败，请重试' } };
         }
