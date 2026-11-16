@@ -71,8 +71,93 @@
 
 .header-top {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
+}
+
+/* 身份 + 孩子 / 班级两枚胶囊上下排，右侧周/月视图开关不换行 */
+.header-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12rpx;
+    min-width: 0;
+}
+
+/* 切换胶囊 + 常驻管理入口同一行，右侧仍留给周 / 月视图开关 */
+.scope-row {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+    max-width: 100%;
+}
+
+.scope-manage-chip {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    padding: 10rpx 16rpx;
+    background: #ffffff;
+    border: 2rpx dashed #b9cdfb;
+    border-radius: 999rpx;
+    font-size: 22rpx;
+    font-weight: 600;
+    color: #2f6bed;
+}
+
+.scope-manage-plus {
+    font-size: 24rpx;
+    margin-right: 4rpx;
+}
+
+.scope-chip {
+    display: flex;
+    align-items: center;
+    max-width: 300rpx;
+    padding: 10rpx 18rpx;
+    background: #f0f6ff;
+    border: 2rpx solid #dbe7ff;
+    border-radius: 999rpx;
+}
+
+.scope-chip-icon {
+    font-size: 24rpx;
+    margin-right: 8rpx;
+}
+
+.scope-chip-name {
+    font-size: 24rpx;
+    font-weight: 600;
+    color: #2f6bed;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.scope-chip-caret {
+    font-size: 20rpx;
+    color: #2f6bed;
+    margin-left: 8rpx;
+}
+
+/* 「全部班级」视图里同一时段并列的课程，用一行标出班级 */
+.chip-scope {
+    display: block;
+    margin-top: 2rpx;
+    font-size: 20rpx;
+    font-weight: 600;
+    opacity: 0.78;
+}
+
+.scope-manage {
+    flex-shrink: 0;
+    margin-top: 16rpx;
+    padding: 22rpx 0 8rpx;
+    border-top: 2rpx solid #e8ecf3;
+    text-align: center;
+    font-size: 27rpx;
+    font-weight: 600;
+    color: #2f6bed;
 }
 
 .role-chip {
@@ -268,12 +353,116 @@
 }
 
 .rail-row {
+    position: relative;
     height: 136rpx;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     border-bottom: 2rpx solid #e8ecf3;
+}
+
+.rail-edit {
+    position: absolute;
+    right: 10rpx;
+    bottom: 8rpx;
+    font-size: 18rpx;
+    color: #aeb7c6;
+}
+
+.unmatched-banner {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20rpx;
+    padding: 20rpx 24rpx;
+    background: #fff7e8;
+    border: 2rpx solid #ffd9a8;
+    border-radius: 20rpx;
+}
+
+.unmatched-icon {
+    width: 40rpx;
+    height: 40rpx;
+    line-height: 40rpx;
+    text-align: center;
+    margin-right: 18rpx;
+    border-radius: 50%;
+    background: #f5a623;
+    color: #ffffff;
+    font-size: 24rpx;
+    font-weight: 600;
+}
+
+.unmatched-title {
+    display: block;
+    font-size: 26rpx;
+    font-weight: 600;
+    color: #9a6100;
+}
+
+.unmatched-desc {
+    display: block;
+    margin-top: 4rpx;
+    font-size: 22rpx;
+    color: #b57a1a;
+    line-height: 1.5;
+}
+
+.unmatched-arrow {
+    margin-left: 12rpx;
+    font-size: 32rpx;
+    color: #b57a1a;
+}
+
+/* 课表左侧节次直接改时间 */
+.period-edit-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 20rpx 28rpx;
+    padding-bottom: calc(28rpx + constant(safe-area-inset-bottom));
+    padding-bottom: calc(28rpx + env(safe-area-inset-bottom));
+    background: #ffffff;
+    border-radius: 32rpx 32rpx 0 0;
+    z-index: 31;
+}
+
+.period-edit-sheet .field {
+    margin-top: 24rpx;
+}
+
+.picker-value {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 84rpx;
+    padding: 18rpx 22rpx;
+    background: #f7f9fd;
+    border: 2rpx solid #e8ecf3;
+    border-radius: 16rpx;
+    font-size: 28rpx;
+    color: #1b2437;
+}
+
+.picker-arrow {
+    color: #aeb7c6;
+}
+
+.period-edit-actions {
+    gap: 20rpx;
+    margin-top: 32rpx;
+}
+
+.period-edit-actions button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 88rpx;
+    line-height: 1;
+    padding: 0;
+    margin: 0;
+    text-align: center;
 }
 
 .rail-label {
@@ -671,7 +860,8 @@
 }
 
 .day-sheet,
-.role-sheet {
+.role-sheet,
+.scope-sheet {
     position: fixed;
     left: 0;
     right: 0;
@@ -704,6 +894,12 @@
 .sheet-list {
     max-height: 56vh;
     margin-top: 16rpx;
+}
+
+/* 归属弹层：选项列表吃掉剩余高度并可滚动，底部管理入口始终留在屏幕内 */
+.scope-sheet .sheet-list {
+    flex: 1;
+    min-height: 0;
 }
 
 .sheet-item {

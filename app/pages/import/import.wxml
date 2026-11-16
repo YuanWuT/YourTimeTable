@@ -16,6 +16,18 @@
             <text class="intro-title">把课表搬进来</text>
         </view>
 
+        <view wx:if="{{scopeVisible}}" class="card">
+            <view class="row-between">
+                <text class="section-title">{{scopeTitle}}</text>
+                <text class="scope-manage-link" bindtap="goScopes">{{scopeManageLabel}} ›</text>
+            </view>
+            <text class="section-sub">本次导入的课程只属于这个{{scopeFieldLabel}}，导入前可随时切换</text>
+            <picker wx:if="{{!scopeEmpty}}" mode="selector" range="{{scopeNames}}" value="{{scopeIndex}}" bindchange="onScopeChange">
+                <view class="scope-select">{{scopeNames[scopeIndex]}} <text class="scope-select-arrow">›</text></view>
+            </picker>
+            <view wx:else class="scope-add" bindtap="goScopes">＋ 先添加{{scopeFieldLabel}} ›</view>
+        </view>
+
         <view class="card">
             <text class="section-title">选择录入方式</text>
             <text class="section-sub">识别结果会先让你确认，再批量写入课表</text>

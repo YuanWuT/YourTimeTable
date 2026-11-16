@@ -1,6 +1,7 @@
 const { cloud } = require('../../utils/cloud');
 const { ROLES } = require('../../utils/config');
 const store = require('../../utils/store');
+const scopes = require('../../utils/scopes');
 
 Page({
     data: {
@@ -16,6 +17,10 @@ Page({
         roleDesc: '管理我自己的课表',
         roleOptions: [],
         showRolePicker: false,
+        scopeManageVisible: false,
+        scopeLabel: '',
+        scopeManageLabel: '',
+        scopeIconText: '',
         courseCount: 0,
         periodCount: 0,
         importCount: 0,
@@ -64,6 +69,7 @@ Page({
             return;
         }
         const role = ROLES.find(item => item.key === settings.role) || ROLES[0];
+        const scope = scopes.scopeOf(settings);
         this.settings = settings;
         this.setData({
             loading: false,
@@ -72,6 +78,10 @@ Page({
             roleName: role.name,
             roleIcon: role.icon,
             roleDesc: role.desc,
+            scopeManageVisible: scope.needsScope,
+            scopeLabel: scope.empty ? '尚未添加' : scope.label,
+            scopeManageLabel: scope.kind ? scope.kind.manageLabel : '',
+            scopeIconText: scope.needsScope ? scope.icon : '',
             courseCount: (results[0].data || []).length,
             periodCount: (results[1].data || []).length,
             importCount: (results[2].data || []).length,
@@ -128,6 +138,10 @@ Page({
         if (key === 'imports') {
             wx.navigateTo({ url: '/pages/imports/imports' });
         }
+    },
+
+    goScopes() {
+        wx.navigateTo({ url: '/pages/scopes/scopes' });
     },
 
     goSettings() {

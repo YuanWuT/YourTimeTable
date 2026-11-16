@@ -35,10 +35,24 @@
             <!-- 身份 + 视图切换 -->
             <view class="header-card">
                 <view class="header-top">
-                    <view class="role-chip" bindtap="openRolePicker">
-                        <text class="role-icon">{{roleIcon}}</text>
-                        <text class="role-name">{{roleName}}</text>
-                        <text class="role-caret">▾</text>
+                    <view class="header-left">
+                        <view class="role-chip" bindtap="openRolePicker">
+                            <text class="role-icon">{{roleIcon}}</text>
+                            <text class="role-name">{{roleName}}</text>
+                            <text class="role-caret">▾</text>
+                        </view>
+                        <!-- 归属胶囊旁常驻管理入口：已添加孩子 / 班级后也能直接加第二个 -->
+                        <view wx:if="{{scopeChipVisible}}" class="scope-row">
+                            <view class="scope-chip" bindtap="openScopePicker">
+                                <text class="scope-chip-icon">{{scopeChipIcon}}</text>
+                                <text class="scope-chip-name">{{scopeChipText}}</text>
+                                <text class="scope-chip-caret">▾</text>
+                            </view>
+                            <view class="scope-manage-chip" bindtap="goScopesAdd">
+                                <text class="scope-manage-plus">＋</text>
+                                <text>{{scopeManageLabel}}</text>
+                            </view>
+                        </view>
                     </view>
                     <view class="seg header-seg">
                         <view class="seg-item {{viewMode === 'week' ? 'seg-item-active' : ''}}" data-mode="week" bindtap="switchView">周视图</view>
@@ -61,6 +75,16 @@
                     <view class="chip {{parityMode === 'even' ? 'chip-active' : ''}}" data-mode="even" bindtap="chooseParity">双周</view>
                     <view class="chip {{parityMode === 'all' ? 'chip-active' : ''}}" data-mode="all" bindtap="chooseParity">全部</view>
                 </view>
+            </view>
+
+            <!-- 时间超出所有节次的课程：醒目提示去增加 / 调整节次 -->
+            <view wx:if="{{unmatchedCount > 0}}" class="unmatched-banner" bindtap="goPeriodSettings">
+                <text class="unmatched-icon">!</text>
+                <view class="grow">
+                    <text class="unmatched-title">{{unmatchedCount}} 节课的时间不在现有节次内</text>
+                    <text class="unmatched-desc">{{unmatchedText}} · 点此调整节次</text>
+                </view>
+                <text class="unmatched-arrow">›</text>
             </view>
 
             <!-- 下一节课 -->
@@ -116,10 +140,12 @@
                     <view class="grid-card">
                         <view class="time-rail">
                         <view class="rail-head"><text>时间</text></view>
-                        <view wx:for="{{timeRail}}" wx:key="sort_no" class="rail-row">
+                        <view wx:for="{{timeRail}}" wx:for-index="railIndex" wx:key="sort_no"
+                              class="rail-row" data-index="{{railIndex}}" bindtap="onPeriodRailTap">
                             <text class="rail-label">{{item.label}}</text>
                             <text class="rail-time">{{item.start_time}}</text>
                             <text class="rail-time">{{item.end_time}}</text>
+                            <text class="rail-edit">✎</text>
                         </view>
                     </view>
                     <scroll-view class="days-scroll" scroll-x="true" scroll-into-view="{{scrollIntoId}}">
@@ -140,6 +166,7 @@
                                             <text wx:if="{{course.checked}}">✓</text>
                                         </view>
                                         <text class="chip-title">{{course.title}}</text>
+                                        <text wx:if="{{showScopeTag && course.scopeText}}" class="chip-scope">{{course.scopeText}}</text>
                                         <text class="chip-time">{{course.chipTimeText}}</text>
                                         <text class="chip-place">{{course.locationText}}</text>
                                         <text wx:if="{{course.chipExtraText}}" class="chip-extra">{{course.chipExtraText}}</text>
@@ -201,6 +228,7 @@
                     <text class="sheet-time">{{item.timeText}}</text>
                 </view>
                 <text class="sheet-meta">{{item.locationText}}</text>
+                <text wx:if="{{showScopeTag && item.scopeText}}" class="sheet-meta">班级 · {{item.scopeText}}</text>
                 <text wx:if="{{item.teacherText}}" class="sheet-meta">老师 · {{item.teacherText}}</text>
                 <text wx:if="{{item.noteText}}" class="sheet-meta">备注 · {{item.noteText}}</text>
                 <text wx:if="{{item.weekText !== '每周'}}" class="tag sheet-tag">{{item.weekText}}</text>
@@ -217,7 +245,7 @@
     <view wx:if="{{showRolePicker}}" class="role-sheet" catchtap="noop">
         <view class="sheet-handle"></view>
         <text class="section-title">切换使用身份</text>
-        <text class="section-sub">学生 / 家长 / 老师各有一份独立课表，切换后自动加载对应课程</text>
+        <text class="section-sub">学生 / 家长 / 老师各有一份独立课表；家长可添加多个孩子、老师可添加多个班级，切换后自动加载</text>
         <view wx:for="{{roleOptions}}" wx:key="key" class="role-option {{item.selected ? 'role-option-selected' : ''}}"
               data-key="{{item.key}}" bindtap="pickRole">
             <text class="role-option-icon">{{item.icon}}</text>
@@ -229,7 +257,58 @@
         </view>
     </view>
 
+    <!-- 家长切孩子 / 老师切班级或看全部班级 -->
+    <view wx:if="{{showScopePicker}}" class="sheet-mask" bindtap="closeScopePicker"></view>
+    <view wx:if="{{showScopePicker}}" class="scope-sheet" catchtap="noop">
+        <view class="sheet-handle"></view>
+        <text class="section-title">{{scopeTitle}}</text>
+        <text class="section-sub">{{scopeHint}}</text>
+        <scroll-view scroll-y class="sheet-list">
+            <view wx:for="{{scopeOptions}}" wx:key="key"
+                  class="role-option {{item.selected ? 'role-option-selected' : ''}}"
+                  data-key="{{item.key}}" bindtap="pickScope">
+                <text class="role-option-icon">{{item.icon}}</text>
+                <view class="grow">
+                    <text class="role-option-name">{{item.name}}</text>
+                    <text class="role-option-desc">{{item.desc}}</text>
+                </view>
+                <text wx:if="{{item.selected}}" class="role-option-check">✓</text>
+            </view>
+            <view wx:if="{{scopeOptions.length === 0}}" class="empty-box">
+                <text class="empty-title">还未添加孩子 / 班级信息</text>
+                <text class="empty-desc">{{scopeHint}}</text>
+            </view>
+        </scroll-view>
+        <view class="scope-manage" bindtap="goScopes">{{scopeManageLabel}} · 添加 / 编辑 / 删除 ›</view>
+    </view>
+
     <!-- 课程详情：只读查看，编辑 / 删除需要用户再点一次 -->
     <course-detail visible="{{showCourseDetail}}" course="{{detailCourse}}" roleName="{{roleName}}"
                    bind:close="closeCourseDetail" bind:edit="editFromDetail" bind:remove="removeFromDetail" />
+
+    <!-- 在课表左侧节次上直接改时间 -->
+    <view wx:if="{{showPeriodEditor}}" class="sheet-mask" bindtap="closePeriodEditor"></view>
+    <view wx:if="{{showPeriodEditor}}" class="period-edit-sheet" catchtap="noop">
+        <view class="sheet-handle"></view>
+        <text class="section-title">调整节次时间</text>
+        <text class="section-sub">{{periodEditLabel}} · 修改后所有身份和班级的课表都会重新排布</text>
+        <view class="field">
+            <text class="field-label">开始时间</text>
+            <picker mode="multiSelector" range="{{periodTimeRange}}" value="{{periodStartParts}}"
+                    data-which="start" bindcolumnchange="onPeriodTimeColumnChange" bindchange="onPeriodTimeChange">
+                <view class="picker-value">{{periodStartText}} <text class="picker-arrow">›</text></view>
+            </picker>
+        </view>
+        <view class="field">
+            <text class="field-label">结束时间</text>
+            <picker mode="multiSelector" range="{{periodTimeRange}}" value="{{periodEndParts}}"
+                    data-which="end" bindcolumnchange="onPeriodTimeColumnChange" bindchange="onPeriodTimeChange">
+                <view class="picker-value">{{periodEndText}} <text class="picker-arrow">›</text></view>
+            </picker>
+        </view>
+        <view class="period-edit-actions row">
+            <button class="plain-btn grow" bindtap="closePeriodEditor">取消</button>
+            <button class="primary-btn grow" bindtap="savePeriodTime" loading="{{periodSaving}}" disabled="{{periodSaving}}">保存</button>
+        </view>
+    </view>
 </view>

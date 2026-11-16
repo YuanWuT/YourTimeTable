@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "管理孩子 / 班级",
+  "usingComponents": {
+    "login-panel": "../../components/login-panel/login-panel"
+  }
+}

@@ -17,8 +17,8 @@
         </view>
 
         <view class="card">
-            <text class="section-title">点格子录入 · {{roleName}}课表</text>
-            <text class="section-sub">点空格子添加课程，点已有课程可编辑或删除；每个身份有自己独立的课表</text>
+            <text class="section-title">{{gridTitle}}</text>
+            <text class="section-sub">点空格子添加课程，点已有课程可编辑或删除；每个身份、每个孩子 / 班级有自己独立的课表</text>
             <view class="intro-actions">
                 <button class="ghost-btn" bindtap="goRecycle">已删除的课程 {{deletedCount}}</button>
                 <button class="ghost-btn" bindtap="goSettings">作息节次</button>

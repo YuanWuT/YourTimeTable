@@ -33,6 +33,10 @@
             <text class="cd-label">所属身份</text>
             <text class="cd-value">{{view.roleName}}</text>
         </view>
+        <view wx:if="{{view.hasScope}}" class="cd-row">
+            <text class="cd-label">孩子 / 班级</text>
+            <text class="cd-value">{{view.scopeName}}</text>
+        </view>
 
         <view class="cd-note">
             <text class="cd-label">备注</text>

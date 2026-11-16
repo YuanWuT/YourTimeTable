@@ -1,3 +1,43 @@
+.scope-manage-link {
+    font-size: 24rpx;
+    font-weight: 600;
+    color: #2f6bed;
+    flex-shrink: 0;
+    margin-left: 16rpx;
+}
+
+.scope-select {
+    min-height: 84rpx;
+    margin-top: 20rpx;
+    padding: 18rpx 22rpx;
+    background: #f2f7ff;
+    border: 2rpx solid #dbe7ff;
+    border-radius: 16rpx;
+    font-size: 28rpx;
+    font-weight: 600;
+    color: #2f6bed;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.scope-select-arrow {
+    font-size: 28rpx;
+    color: #2f6bed;
+}
+
+.scope-add {
+    margin-top: 20rpx;
+    padding: 22rpx;
+    background: #eaf1ff;
+    border: 2rpx dashed #b9cdfb;
+    border-radius: 16rpx;
+    font-size: 27rpx;
+    font-weight: 600;
+    color: #2f6bed;
+    text-align: center;
+}
+
 .import-page {
     padding-top: 28rpx;
 }

@@ -1,5 +1,6 @@
 const { ROLES } = require('../../utils/config');
 const store = require('../../utils/store');
+const scopes = require('../../utils/scopes');
 const S = require('../../utils/schedule');
 
 const EMPTY_DAY_TABS = S.DAY_NAMES.map((name, index) => ({ index: index, name: name, count: 0 }));
@@ -10,6 +11,7 @@ Page({
         loading: true,
         errorText: '',
         roleName: '学生',
+        gridTitle: '点格子录入 · 学生课表',
         columns: [],
         timeRail: [],
         courseCount: 0,
@@ -63,7 +65,9 @@ Page({
             return;
         }
         const periods = results[0].data || [];
-        const courses = results[1].data || [];
+        const settings = settingsResult.data;
+        const scope = scopes.scopeOf(settings);
+        const courses = scopes.decorate(results[1].data || [], settings);
         this.courses = courses;
         this.selectedIds = [];
         const today = new Date();
@@ -74,6 +78,8 @@ Page({
             loading: false,
             errorText: '',
             roleName: roleInfo.name,
+            gridTitle: '点格子录入 · ' + roleInfo.name
+                + (scope.label ? ' · ' + scope.label : '') + '课表',
             columns: this.withSelection(grid.columns),
             timeRail: grid.slots,
             courseCount: courses.length,

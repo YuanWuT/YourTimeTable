@@ -29,6 +29,7 @@
         <view wx:for="{{items}}" wx:key="id" class="card recycle-item" style="border-left:8rpx solid {{item.solid}}">
             <text class="ri-title">{{item.title}}</text>
             <text class="ri-meta">{{item.dayText}} {{item.timeText}} · {{item.locationText}} · {{item.weekText}}</text>
+            <text wx:if="{{item.scopeText}}" class="ri-meta">孩子 / 班级 · {{item.scopeText}}</text>
             <text wx:if="{{item.teacherText}}" class="ri-meta">老师 · {{item.teacherText}}</text>
             <text wx:if="{{item.noteText}}" class="ri-meta">备注 · {{item.noteText}}</text>
             <view class="ri-actions">

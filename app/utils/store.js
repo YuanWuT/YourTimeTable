@@ -4,11 +4,12 @@ const { cloud } = require('./cloud');
 const { createTableAccess } = require('./workbuddy-data-access');
 const { DEFAULT_PERIODS, defaultTermStart, sortCourses, normalizePeriods, dedupeCourses } = require('./schedule');
 const { NOTE_MAX_LENGTH } = require('./config');
+const scopes = require('./scopes');
 
 const COURSE_COLUMNS = [
     'id', 'title', 'teacher', 'location', 'day_of_week', 'period_no',
     'start_time', 'end_time', 'week_type', 'color', 'note', 'remind',
-    'lead_minutes', 'role', 'deleted', 'deleted_at', 'created_at', 'updated_at',
+    'lead_minutes', 'role', 'scope_key', 'deleted', 'deleted_at', 'created_at', 'updated_at',
 ];
 const PERIOD_COLUMNS = ['id', 'sort_no', 'label', 'start_time', 'end_time'];
 const IMPORT_COLUMNS = ['id', 'source', 'file_name', 'storage_path', 'row_count', 'created_at'];
@@ -57,6 +58,7 @@ function courseToRow(course) {
     if (c.remind !== undefined) row.remind = Boolean(c.remind);
     if (c.lead_minutes !== undefined) row.lead_minutes = int(c.lead_minutes, 0, 180, 15);
     if (c.role !== undefined) row.role = ROLE_KEYS.indexOf(c.role) >= 0 ? c.role : 'student';
+    if (c.scope_key !== undefined) row.scope_key = text(c.scope_key, '', 40);
     if (c.deleted !== undefined) row.deleted = Boolean(c.deleted);
     if (c.deleted_at !== undefined) row.deleted_at = c.deleted_at || null;
     return row;
@@ -79,6 +81,7 @@ function courseFromRow(row) {
         remind: r.remind !== false,
         lead_minutes: int(r.lead_minutes, 0, 180, 15),
         role: ROLE_KEYS.indexOf(r.role) >= 0 ? r.role : 'student',
+        scope_key: text(r.scope_key, '', 40),
         deleted: r.deleted === true,
         deleted_at: r.deleted_at || '',
         created_at: r.created_at || '',
@@ -151,6 +154,10 @@ function settingsFromRow(row) {
         remind_enabled: r.remind_enabled !== false,
         default_lead: int(r.default_lead, 0, 180, 15),
         subscribe_state: r.subscribe_state || '',
+        // 孩子 / 班级配置以 JSON 字符串存云端，解析统一交给 utils/scopes.js
+        children: r.children || '[]',
+        classes: r.classes || '[]',
+        active_scope: r.active_scope || '',
         created_at: r.created_at || '',
         updated_at: r.updated_at || '',
     };
@@ -167,6 +174,10 @@ function settingsToRow(patch) {
     if (p.remind_enabled !== undefined) row.remind_enabled = Boolean(p.remind_enabled);
     if (p.default_lead !== undefined) row.default_lead = int(p.default_lead, 0, 180, 15);
     if (p.subscribe_state !== undefined) row.subscribe_state = text(p.subscribe_state, '', 1000);
+    // 上限 20 个 scope、每字段有长度限制，留 50000 足够，截断会破坏 JSON 结构
+    if (p.children !== undefined) row.children = text(p.children, '[]', 50000);
+    if (p.classes !== undefined) row.classes = text(p.classes, '[]', 50000);
+    if (p.active_scope !== undefined) row.active_scope = text(p.active_scope, '', 40);
     return row;
 }
 
@@ -252,14 +263,36 @@ function currentRole() {
     return 'student';
 }
 
-async function listCourses(role) {
+// 家长 / 老师的课表还要按「当前孩子 / 班级」再过滤一层。
+// 全局设置尚未同步时不能贸然过滤（否则会把老课表全部藏起来），
+// 此时返回空列表视图，scopes.belongsTo 会放行所有课程。
+function scopeForRole(role) {
+    try {
+        const settings = getApp().globalData.settings;
+        if (settings && settings.role === role) return scopes.scopeOf(settings);
+    } catch (error) {
+        // 单元测试环境没有 getApp
+    }
+    return scopes.scopeOf({ role: role });
+}
+
+function currentScope() {
+    return scopeForRole(currentRole());
+}
+
+async function listCourses(role, options) {
     const wanted = ROLE_KEYS.indexOf(role) >= 0 ? role : currentRole();
+    const active = options && options.scope ? options.scope : scopeForRole(wanted);
     const result = await coursesAccess.list();
     if (result.error) return result;
-    const visible = (result.data || []).filter(item => !item.deleted && item.role === wanted);
+    const visible = (result.data || []).filter(item => (
+        !item.deleted && item.role === wanted && scopes.belongsTo(item, active)
+    ));
     return ok(sortCourses(visible));
 }
 
+// 回收站按身份查看全部已删除课程，不再按孩子 / 班级过滤：
+// 误删后无论当前在看哪个孩子，都能找回，恢复后课程仍保留原归属。
 async function listDeletedCourses(role) {
     const wanted = ROLE_KEYS.indexOf(role) >= 0 ? role : currentRole();
     const result = await coursesAccess.list();
@@ -270,8 +303,12 @@ async function listDeletedCourses(role) {
 
 function createCourse(payload) {
     const source = payload || {};
+    const role = ROLE_KEYS.indexOf(source.role) >= 0 ? source.role : currentRole();
     const row = Object.assign({}, source, {
-        role: ROLE_KEYS.indexOf(source.role) >= 0 ? source.role : currentRole(),
+        role: role,
+        scope_key: source.scope_key !== undefined
+            ? source.scope_key
+            : scopes.defaultWriteKey(scopeForRole(role)),
         deleted: false,
         deleted_at: null,
     });
@@ -325,6 +362,35 @@ async function removeCourses(ids) {
     }
 }
 
+// 删除一个孩子 / 班级时，把它名下的课程移进「已删除的课程」而不是留成孤儿。
+// includeLegacy=true 用于删第一个 scope：老数据 scope_key 为空，原本也认领在它名下。
+async function removeCoursesByScope(role, scopeKey, includeLegacy) {
+    const keys = [String(scopeKey || '')];
+    if (includeLegacy) keys.push('');
+    try {
+        const stamp = new Date().toISOString();
+        const builder = cloud.database.from('courses')
+            .update({ deleted: true, deleted_at: stamp, updated_at: stamp })
+            .eq('role', role)
+            .eq('deleted', false);
+        if (typeof builder.in === 'function') {
+            const result = await builder.in('scope_key', keys).select('id');
+            if (result.error) return fail(result.error);
+            return ok((result.data || []).length);
+        }
+        // 旧版 SDK 没有 in 过滤：拉回本用户课程后逐条软删除
+        const all = await coursesAccess.list();
+        if (all.error) return all;
+        const ids = (all.data || [])
+            .filter(item => item.role === role && !item.deleted
+                && keys.indexOf(String(item.scope_key || '')) >= 0)
+            .map(item => item.id);
+        return removeCourses(ids);
+    } catch (error) {
+        return fail(clientError(error));
+    }
+}
+
 function restoreCourse(id) {
     return coursesAccess.update(id, { deleted: false, deleted_at: null });
 }
@@ -336,10 +402,14 @@ function purgeCourse(id) {
 async function createCoursesBatch(list) {
     try {
         const role = currentRole();
+        const scope = scopeForRole(role);
         const rows = dedupeCourses(list || []).map(item => {
             const source = item || {};
             return courseToRow(Object.assign({}, source, {
                 role: ROLE_KEYS.indexOf(source.role) >= 0 ? source.role : role,
+                scope_key: source.scope_key !== undefined
+                    ? source.scope_key
+                    : scopes.defaultWriteKey(scope),
                 deleted: false,
                 deleted_at: null,
             }));
@@ -536,12 +606,15 @@ module.exports = {
     ensureSettings,
     syncSettings,
     currentRole,
+    currentScope,
+    scopeForRole,
     listCourses,
     listDeletedCourses,
     createCourse,
     updateCourse,
     removeCourse,
     removeCourses,
+    removeCoursesByScope,
     restoreCourse,
     purgeCourse,
     createCoursesBatch,

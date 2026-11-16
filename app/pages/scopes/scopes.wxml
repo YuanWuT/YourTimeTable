@@ -1,0 +1,114 @@
+<view class="page page-safe scopes-page">
+    <block wx:if="{{authState === 'checking' || loading}}">
+        <view class="loading-box">
+            <view class="spinner"></view>
+            <text class="empty-desc">正在加载…</text>
+        </view>
+    </block>
+
+    <block wx:elif="{{authState === 'signed-out'}}">
+        <login-panel title="登录后管理孩子 / 班级" bind:signedin="onRetry" bind:demo="onDemo" />
+    </block>
+
+    <block wx:else>
+        <view wx:if="{{errorText}}" class="error-card">
+            <text class="error-desc">{{errorText}}</text>
+            <button class="plain-btn retry-btn" bindtap="onRetry">重新加载</button>
+        </view>
+
+        <block wx:if="{{studentMode}}">
+            <view class="card">
+                <text class="section-title">学生身份无需添加</text>
+                <text class="section-sub">请先在课表页或「我的」页把身份切换为家长或老师，再回来添加孩子 / 班级。学生身份的课表保持原来的用法不变。</text>
+                <button class="ghost-btn scope-role-btn" bindtap="goRole">去切换身份</button>
+            </view>
+        </block>
+
+        <block wx:else>
+            <view class="card">
+                <text class="section-title">{{kind.listTitle}}</text>
+                <text class="section-sub" wx:if="{{isParent}}">一个家庭可以添加多个孩子，每个孩子有独立课表；孩子的性别、班级、学校和备注只用于区分，不影响课程数据。</text>
+                <text class="section-sub" wx:else>可以添加多个任教班级，按班级单独查看，也能在课表页选「全部班级」一次看所有课。</text>
+                <text class="scope-count">已添加 {{countText}} · 当前查看：{{scopeLabel || '未添加'}}</text>
+            </view>
+
+            <view wx:if="{{list.length === 0}}" class="empty-box scope-empty">
+                <text class="empty-title">{{kind.emptyTitle}}</text>
+                <text class="empty-desc">{{kind.emptyHint}}</text>
+            </view>
+
+            <view wx:for="{{list}}" wx:key="id" class="card scope-item {{item.selected ? 'scope-item-active' : ''}}">
+                <view class="row">
+                    <text class="scope-item-icon">{{item.icon}}</text>
+                    <view class="grow">
+                        <view class="row">
+                            <text class="scope-item-name">{{item.name}}</text>
+                            <text wx:if="{{item.genderName}}" class="tag scope-gender-tag">{{item.genderName}}</text>
+                            <text wx:if="{{item.selected}}" class="tag scope-current-tag">当前查看</text>
+                        </view>
+                        <text wx:if="{{item.summary}}" class="scope-item-meta">{{item.summary}}</text>
+                        <text wx:if="{{item.note}}" class="scope-item-meta">{{item.note}}</text>
+                    </view>
+                </view>
+                <view class="scope-item-actions">
+                    <text class="scope-link" data-id="{{item.id}}" bindtap="openEdit">编辑</text>
+                    <text class="scope-link-danger" data-id="{{item.id}}" bindtap="removeOne">删除</text>
+                </view>
+            </view>
+
+            <view wx:if="{{list.length > 0}}" class="scope-legacy-tip">
+                <text>升级前录入的课程会自动归到第一个{{kind.noun}}名下，不会丢失；新建或导入的课程按所选归属保存。</text>
+            </view>
+
+            <view class="bottom-bar-spacer"></view>
+            <view class="bottom-bar">
+                <button class="primary-btn" bindtap="openAdd" loading="{{saving}}" disabled="{{saving}}">＋ {{kind.addLabel}}</button>
+            </view>
+        </block>
+    </block>
+
+    <!-- 新增 / 编辑 -->
+    <view wx:if="{{editorVisible}}" class="sheet-mask" bindtap="closeEditor"></view>
+    <view wx:if="{{editorVisible}}" class="editor-sheet" catchtap="noop">
+        <view class="sheet-handle"></view>
+        <text class="section-title">{{editorTitle}}</text>
+        <text class="section-sub">名称用于切换课表；选男孩 / 女孩后课表页会显示对应头像，其余信息只用于区分</text>
+        <scroll-view scroll-y class="editor-body">
+            <view class="field">
+                <text class="field-label">{{kind.nameLabel}} *</text>
+                <input class="input" placeholder="{{kind.namePlaceholder}}" placeholder-class="input-placeholder"
+                       value="{{form.name}}" data-field="name" bindinput="onFormInput" maxlength="20" />
+            </view>
+            <view wx:if="{{isParent}}" class="field">
+                <text class="field-label">性别（选填）</text>
+                <view class="gender-row">
+                    <view wx:for="{{genders}}" wx:key="key"
+                          class="gender-option {{form.gender === item.key ? 'gender-option-active' : ''}}"
+                          data-gender="{{item.key}}" bindtap="onGenderChange">
+                        <text class="gender-icon">{{item.icon}}</text>
+                        <text class="gender-name">{{item.name}}</text>
+                    </view>
+                </view>
+            </view>
+            <view class="field">
+                <text class="field-label">{{kind.detailLabel}}</text>
+                <input class="input" placeholder="{{kind.detailPlaceholder}}" placeholder-class="input-placeholder"
+                       value="{{form.detail}}" data-field="detail" bindinput="onFormInput" maxlength="40" />
+            </view>
+            <view class="field">
+                <text class="field-label">{{kind.extraLabel}}</text>
+                <input class="input" placeholder="{{kind.extraPlaceholder}}" placeholder-class="input-placeholder"
+                       value="{{form.extra}}" data-field="extra" bindinput="onFormInput" maxlength="40" />
+            </view>
+            <view class="field">
+                <text class="field-label">{{kind.noteLabel}}</text>
+                <input class="input" placeholder="{{kind.notePlaceholder}}" placeholder-class="input-placeholder"
+                       value="{{form.note}}" data-field="note" bindinput="onFormInput" maxlength="60" />
+            </view>
+        </scroll-view>
+        <view class="editor-actions row">
+            <button class="plain-btn grow" bindtap="closeEditor">取消</button>
+            <button class="primary-btn grow" bindtap="saveEditor" loading="{{saving}}" disabled="{{saving}}">保存</button>
+        </view>
+    </view>
+</view>

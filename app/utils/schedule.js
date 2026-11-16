@@ -171,7 +171,10 @@ function dedupeCourses(list) {
     const result = [];
     (list || []).forEach(course => {
         if (!course) return;
-        const duplicate = result.some(kept => isSameCourseSlot(kept, course));
+        // 不同孩子 / 班级的「同名同时间」是两节真实的课，
+        // 老师看「全部班级」时必须并列显示，不能当成重复录入去重。
+        const duplicate = result.some(kept => isSameCourseSlot(kept, course)
+            && String(kept.scope_key || '') === String(course.scope_key || ''));
         if (!duplicate) result.push(course);
     });
     return result;
@@ -243,6 +246,8 @@ function styleCourse(course) {
         locationText: course.location || '未填地点',
         teacherText: teacher,
         noteText: note,
+        // 「全部班级」视图里同一时段可能并列多个班的课，用一行标出归属
+        scopeText: clipText(course.scopeName, 8),
         // 网格格子用一行紧凑文本：老师 + 备注，避免多占一行导致溢出
         chipExtraText: clipText([clipText(teacher, 8), clipText(note, 10)].filter(Boolean).join(' · '), 20),
         chipTimeText: start + (end ? '–' + end : '') + (weekText !== '每周' ? ' · ' + weekText : ''),
@@ -267,9 +272,14 @@ function normalizePeriods(list) {
 }
 
 function slotIndexFor(course, slots) {
-    const periodNo = Number(course.period_no || 0);
-    if (periodNo > 0 && periodNo <= slots.length) return periodNo - 1;
     const start = timeToMinutes(course.start_time);
+    const periodNo = Number(course.period_no || 0);
+    if (periodNo > 0 && periodNo <= slots.length) {
+        const slotStart = timeToMinutes(slots[periodNo - 1].start_time);
+        // 节次时间被改过、或录入时选错节次：偏差超过一节课就按实际时间重新落位，
+        // 避免 17:00 的课继续挂在 14:55 的第 6 节格子里看起来「时间不匹配」。
+        if (start < 0 || Math.abs(slotStart - start) <= 45) return periodNo - 1;
+    }
     if (start < 0) return 0;
     for (let i = 0; i < slots.length; i += 1) {
         const a = timeToMinutes(slots[i].start_time);
@@ -286,6 +296,20 @@ function slotIndexFor(course, slots) {
         }
     });
     return best;
+}
+
+// 时间落在所有节次之外的课程：周视图只能把它们塞进最近的格子，
+// 用户会觉得「另一班的课没显示 / 时间不匹配」。页面据此提示增加或调整节次。
+function unmatchedCourses(courses, periods) {
+    const slots = normalizePeriods(periods);
+    if (!slots.length) return [];
+    return (courses || []).filter(course => {
+        if (!course || course.deleted) return false;
+        const start = timeToMinutes(course.start_time);
+        if (start < 0) return false;
+        return !slots.some(slot => start >= timeToMinutes(slot.start_time)
+            && start < timeToMinutes(slot.end_time));
+    });
 }
 
 // 周视图：左时间轴 + 7 天可横向滚动的列
@@ -426,6 +450,7 @@ module.exports = {
     styleCourse,
     styledCourses,
     normalizePeriods,
+    unmatchedCourses,
     buildWeekColumns,
     buildMonthCells,
     nextClass,

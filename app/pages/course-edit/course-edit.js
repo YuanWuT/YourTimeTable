@@ -1,5 +1,6 @@
 const { COURSE_COLORS, NOTE_MAX_LENGTH } = require('../../utils/config');
 const store = require('../../utils/store');
+const scopes = require('../../utils/scopes');
 const S = require('../../utils/schedule');
 
 const LEAD_OPTIONS = [0, 5, 10, 15, 20, 30, 45, 60];
@@ -8,6 +9,7 @@ const LEAD_OPTIONS = [0, 5, 10, 15, 20, 30, 45, 60];
 const FORM_FIELDS = [
     'title', 'teacher', 'location', 'day_of_week', 'period_no',
     'start_time', 'end_time', 'week_type', 'color', 'note', 'remind', 'lead_minutes',
+    'scope_key',
 ];
 const WEEK_TYPES = [
     { key: 'all', name: '每周' },
@@ -26,6 +28,18 @@ function timeParts(value) {
     const normalized = S.normalizeTime(value) || '08:00';
     const pieces = normalized.split(':');
     return [Number(pieces[0]), Number(pieces[1])];
+}
+
+// 结束时间必须晚于开始时间。用户改开始时间导致原结束时间失效时，
+// 自动补一节课的默认时长，避免出现 09:00–08:45 这种先于开始的无效区间。
+function withValidEnd(form) {
+    const start = S.timeToMinutes(form.start_time);
+    const end = S.timeToMinutes(form.end_time);
+    if (start < 0 || (end >= 0 && end > start)) return { form: form, changed: false };
+    const next = Math.min(23 * 60 + 59, start + 45);
+    const adjusted = S.pad2(Math.floor(next / 60)) + ':' + S.pad2(next % 60);
+    if (adjusted === form.end_time) return { form: form, changed: false };
+    return { form: Object.assign({}, form, { end_time: adjusted }), changed: true };
 }
 
 // 表单时间变化后同步 picker 的选中位置与展示文本（WXML 里不做复杂运算）。
@@ -58,6 +72,7 @@ function emptyForm() {
         note: '',
         remind: true,
         lead_minutes: 15,
+        scope_key: '',
     };
 }
 
@@ -81,6 +96,12 @@ Page({
         leadLabels: LEAD_OPTIONS.map(value => value === 0 ? '上课时提醒' : '提前 ' + value + ' 分钟'),
         leadIndex: 3,
         deletedCount: 0,
+        scopePickerVisible: false,
+        scopeEmpty: false,
+        scopeFieldLabel: '',
+        scopeNames: [],
+        scopeIndex: 0,
+        scopeKey: '',
         noteMax: NOTE_MAX_LENGTH,
         noteLength: 0,
         hours: HOURS,
@@ -127,6 +148,9 @@ Page({
             return;
         }
         const role = settingsResult.data.role;
+        const scope = scopes.scopeOf(settingsResult.data);
+        this.settings = settingsResult.data;
+        this.scope = scope;
         const [periodsResult, deletedResult] = await Promise.all([
             store.listPeriods(),
             store.listDeletedCourses(role),
@@ -142,7 +166,10 @@ Page({
         );
         let form = emptyForm();
         if (this.courseId) {
-            const coursesResult = await store.listCourses(role);
+            // 「全部班级」范围里查找：即使当前正看某一个班级，也能编辑另一个班的课
+            const coursesResult = await store.listCourses(role, {
+                scope: Object.assign({}, scope, { isAll: true }),
+            });
             if (coursesResult.error) {
                 this.setData({ loading: false, errorText: coursesResult.error.message || '加载课程失败' });
                 return;
@@ -167,6 +194,26 @@ Page({
                 }
             }
         }
+        // 归属：家长选孩子、老师选班级；学生身份不显示也不写入。
+        // 老课程没有 scope_key，按兼容规则落在第一个孩子 / 班级名下，保存时完成认领。
+        const scopeList = scope.list || [];
+        const scopeNames = scopeList.map(item => {
+            const summary = scopes.summaryOf(item);
+            return summary ? item.name + ' · ' + summary : item.name;
+        });
+        let scopeKey = String(form.scope_key || '');
+        if (!scope.needsScope) {
+            scopeKey = '';
+        } else {
+            if (!this.courseId) scopeKey = scopes.defaultWriteKey(scope);
+            else if (!scopeKey) scopeKey = scopes.legacyKey(scope);
+            if (scopeList.length === 0) scopeKey = '';
+        }
+        let scopeIndex = scopeList.findIndex(item => item.id === scopeKey);
+        if (scopeIndex < 0) scopeIndex = 0;
+        if (scopeList.length > 0) scopeKey = scopeList[scopeIndex].id;
+        form.scope_key = scopeKey;
+
         const leadValue = Number(form.lead_minutes);
         const leadOptions = LEAD_OPTIONS.slice();
         if (leadOptions.indexOf(leadValue) < 0) {
@@ -193,6 +240,12 @@ Page({
             leadLabels: leadOptions.map(value => value === 0 ? '上课时提醒' : '提前 ' + value + ' 分钟'),
             leadIndex: leadIndex,
             deletedCount: (deletedResult.data || []).length,
+            scopePickerVisible: scope.needsScope && scopeList.length > 0,
+            scopeEmpty: scope.needsScope && scopeList.length === 0,
+            scopeFieldLabel: scope.kind ? scope.kind.noun : '',
+            scopeNames: scopeNames,
+            scopeIndex: scopeIndex,
+            scopeKey: scopeKey,
         }, timeState(form)));
     },
 
@@ -222,20 +275,26 @@ Page({
         this.setData(patch);
     },
 
-    // 选完时 / 分自动拼成 HH:MM，用户全程不用输入冒号。
+    // 选完时 / 分自动拼成 HH:MM；改开始时间时结束时间自动联动到更晚，
+    // 保证不会出现 09:00–08:45 这种先于开始的无效区间。
     onTimeChange(event) {
         const field = event.currentTarget.dataset.field;
         if (field !== 'start_time' && field !== 'end_time') return;
         const picked = event.detail.value || [0, 0];
         const hour = Math.min(23, Math.max(0, Number(picked[0]) || 0));
         const minute = Math.min(59, Math.max(0, Number(picked[1]) || 0));
-        const form = Object.assign({}, this.data.form, { period_no: 0 });
+        let form = Object.assign({}, this.data.form, { period_no: 0 });
         form[field] = S.pad2(hour) + ':' + S.pad2(minute);
-        this.setData(Object.assign({
+        const checked = withValidEnd(form);
+        form = checked.form;
+        const patch = Object.assign({
             form: form,
             periodIndex: 0,
             errorText: '',
-        }, timeState(form)));
+        }, timeState(form));
+        this.setData(patch, () => {
+            if (checked.changed) wx.showToast({ title: '结束时间已自动调整', icon: 'none' });
+        });
     },
 
     onDayChange(event) {
@@ -273,6 +332,19 @@ Page({
         this.setData({ colors: colors, form: Object.assign({}, this.data.form, { color: key }) });
     },
 
+    onScopeChange(event) {
+        const index = Number(event.detail.value) || 0;
+        const list = (this.scope && this.scope.list) || [];
+        if (!list[index]) return;
+        const key = list[index].id;
+        this.setData({
+            scopeIndex: index,
+            scopeKey: key,
+            form: Object.assign({}, this.data.form, { scope_key: key }),
+            errorText: '',
+        });
+    },
+
     onRemindChange(event) {
         this.setData({ form: Object.assign({}, this.data.form, { remind: event.detail.value }) });
     },
@@ -292,6 +364,10 @@ Page({
         if (!S.isValidTime(form.end_time)) return '结束时间无效，请重新按小时、分钟选择';
         if (S.timeToMinutes(form.end_time) <= S.timeToMinutes(form.start_time)) {
             return '结束时间要晚于开始时间（暂不支持跨午夜课程）';
+        }
+        if (this.data.scopeEmpty) return '请先添加孩子 / 班级，再录入课程';
+        if (this.data.scopePickerVisible && !this.data.scopeKey) {
+            return '请选择所属' + this.data.scopeFieldLabel;
         }
         return '';
     },
@@ -321,8 +397,14 @@ Page({
         // 保存前收敛到该节次的标准时间，避免同一时段被算成两节课。
         const finalForm = S.snapCourseToPeriods(form, this.data.periods);
         const aligned = finalForm.start_time !== form.start_time || finalForm.end_time !== form.end_time;
-        // 录入侧限制：同一天、周次会相遇、时间有交集的课程不允许再排一节。
-        const existing = await store.listCourses();
+        // 冲突比对按「表单选定的归属」进行：老师看全部班级时，
+        // 也要跟目标班级里已有的课比，不能只跟当前视图里的课比。
+        const targetScope = this.data.scopePickerVisible
+            ? Object.assign({}, this.scope, { key: this.data.scopeKey, isAll: false })
+            : null;
+        const existing = targetScope
+            ? await store.listCourses(undefined, { scope: targetScope })
+            : await store.listCourses();
         if (existing.error) {
             this.showError(existing.error.message || '无法核对已有课程，请稍后重试');
             return;
@@ -366,6 +448,26 @@ Page({
             return;
         }
         wx.showToast({ title: aligned ? '已保存，时间已按作息对齐' : '已保存', icon: 'success' });
+        // 时间不在任何节次内时，课表只能把它放到最近的格子；
+        // 是否增加 / 调整节次交给用户确认，不擅自改动节次数据。
+        const unmatched = S.unmatchedCourses([finalForm], this.data.periods);
+        if (unmatched.length > 0) {
+            const confirmed = await new Promise((resolve) => {
+                wx.showModal({
+                    title: '这节课的时间不在现有节次内',
+                    content: finalForm.start_time + '–' + finalForm.end_time
+                        + ' 不在任何作息节次范围内，课表会把它放在最接近的节次。是否现在去增加 / 调整节次？',
+                    confirmText: '去设置节次',
+                    cancelText: '暂不',
+                    success: res => resolve(Boolean(res.confirm)),
+                    fail: () => resolve(false),
+                });
+            });
+            if (confirmed) {
+                wx.navigateTo({ url: '/pages/settings/settings?focus=periods' });
+                return;
+            }
+        }
         setTimeout(() => wx.navigateBack(), 700);
     },
 
@@ -398,7 +500,11 @@ Page({
     },
 
     goPeriods() {
-        wx.navigateTo({ url: '/pages/settings/settings' });
+        wx.navigateTo({ url: '/pages/settings/settings?focus=periods' });
+    },
+
+    goScopes() {
+        wx.navigateTo({ url: '/pages/scopes/scopes' });
     },
 
     goBack() {

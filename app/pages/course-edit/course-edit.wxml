@@ -27,6 +27,16 @@
 
         <view class="card compact-card">
             <text class="section-title">课程信息</text>
+            <view wx:if="{{scopePickerVisible}}" class="field">
+                <text class="field-label">所属{{scopeFieldLabel}} *</text>
+                <picker mode="selector" range="{{scopeNames}}" value="{{scopeIndex}}" bindchange="onScopeChange">
+                    <view class="picker-value">{{scopeNames[scopeIndex]}} <text class="picker-arrow">›</text></view>
+                </picker>
+            </view>
+            <view wx:if="{{scopeEmpty}}" class="scope-tip" bindtap="goScopes">
+                <text class="scope-tip-title">＋ 先添加{{scopeFieldLabel}}</text>
+                <text class="scope-tip-desc">家长可添加多个孩子，老师可添加多个班级；添加后再录入课程 ›</text>
+            </view>
             <view class="field">
                 <text class="field-label">课程名称 *</text>
                 <input class="input" placeholder="例如：高等数学" placeholder-class="input-placeholder"

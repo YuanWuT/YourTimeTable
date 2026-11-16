@@ -24,6 +24,9 @@ function detailOf(course, roleName) {
         remindText: remindOff
             ? '未开启'
             : (lead > 0 ? '已开启 · 提前 ' + lead + ' 分钟' : '已开启 · 上课时提醒'),
+        // scopeName 由页面 decorate 后带进来，学生身份下为空
+        scopeName: String(item.scopeName || '').trim(),
+        hasScope: Boolean(String(item.scopeName || '').trim()),
         roleName: roleName || '学生',
     };
 }

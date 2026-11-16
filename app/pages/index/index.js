@@ -1,6 +1,20 @@
 const { ROLES } = require('../../utils/config');
 const store = require('../../utils/store');
+const scopes = require('../../utils/scopes');
 const S = require('../../utils/schedule');
+
+// 课表页直接改节次时间用的两列选择器数据
+const PERIOD_HOURS = [];
+const PERIOD_MINUTES = [];
+for (let h = 0; h < 24; h += 1) PERIOD_HOURS.push(S.pad2(h));
+for (let m = 0; m < 60; m += 1) PERIOD_MINUTES.push(S.pad2(m));
+const PERIOD_TIME_RANGE = [PERIOD_HOURS, PERIOD_MINUTES];
+
+function timePartsOf(value) {
+    const normalized = S.normalizeTime(value) || '08:00';
+    const pieces = normalized.split(':');
+    return [Number(pieces[0]), Number(pieces[1])];
+}
 
 function findOffsetForParity(currentOffset, wanted, termStart) {
     const todayMonday = S.mondayOf(new Date());
@@ -49,6 +63,16 @@ Page({
         selectedDayCourses: [],
         showRolePicker: false,
         roleOptions: [],
+        scopeChipVisible: false,
+        scopeChipText: '',
+        scopeChipIcon: '',
+        scopeTitle: '',
+        scopeHint: '',
+        scopeManageLabel: '',
+        scopeEmpty: false,
+        showScopeTag: false,
+        showScopePicker: false,
+        scopeOptions: [],
         batchMode: false,
         selectedIds: [],
         selectedCount: 0,
@@ -56,6 +80,20 @@ Page({
         showCourseDetail: false,
         detailCourse: null,
         detailBusy: false,
+        // 时间落在所有节次之外的课程：顶部醒目提示去增加 / 调整节次
+        unmatchedCount: 0,
+        unmatchedText: '',
+        // 课表页直接改节次时间
+        showPeriodEditor: false,
+        periodEditIndex: -1,
+        periodEditSort: 0,
+        periodEditLabel: '',
+        periodStartParts: [8, 0],
+        periodEndParts: [8, 45],
+        periodStartText: '08:00',
+        periodEndText: '08:45',
+        periodTimeRange: PERIOD_TIME_RANGE,
+        periodSaving: false,
     },
 
     onLoad() {
@@ -97,6 +135,9 @@ Page({
                 weekColumns: [],
                 monthCells: [],
                 nextCourse: null,
+                unmatchedCount: 0,
+                unmatchedText: '',
+                showPeriodEditor: false,
             });
             return;
         }
@@ -125,7 +166,12 @@ Page({
         }
         this.settings = settingsResult.data;
         this.periods = results[0].data || [];
-        this.courses = results[1].data || [];
+        // 课程按当前孩子 / 班级过滤后，补一个可读的归属名，供「全部班级」视图展示
+        const scope = scopes.scopeOf(settingsResult.data);
+        this.courses = scopes.decorate(results[1].data || [], settingsResult.data);
+        // 课程时间超出所有节次时会被塞进最近的格子，用户容易误以为「另一班的课没显示」；
+        // 顶部给一条醒目提示，家长 / 老师 / 学生同样适用。
+        const unmatched = S.unmatchedCourses(this.courses, this.periods);
         // 身份 / 数据刷新后清空勾选，避免选中了另一个身份的课程
         this.selectedIds = [];
         getApp().globalData.settings = this.settings;
@@ -136,13 +182,31 @@ Page({
             loading: false,
             errorText: '',
             role: settings.role,
+            scopeChipVisible: scope.needsScope,
+            scopeChipText: scope.empty ? scope.kind.addLabel : scope.label,
+            scopeChipIcon: scope.empty ? '＋' : scope.icon,
+            scopeTitle: scope.kind ? scope.kind.switchTitle : '',
+            scopeHint: scope.empty ? scope.kind.emptyHint : scope.switchHint,
+            scopeManageLabel: scope.kind ? scope.kind.manageLabel : '',
+            scopeEmpty: scope.empty,
+            showScopeTag: scope.isAll,
+            // 不再无条件关闭切换弹层：onShow 的异步刷新与用户点击存在时序竞争，
+            // 以前 showScopePicker: false 会让「添加第二个孩子 / 班级」时弹层偶尔一闪就消失。
+            scopeOptions: scopes.optionsOf(scope),
             batchMode: false,
             selectedIds: [],
             selectedCount: 0,
             // 身份 / 数据刷新后关闭详情，避免展示另一份课表里的课程
             showCourseDetail: false,
             detailCourse: null,
+            unmatchedCount: unmatched.length,
+            unmatchedText: unmatched.slice(0, 2).map(course =>
+                (course.scopeName ? course.scopeName + ' · ' : '') + course.title + ' '
+                + course.start_time + '–' + course.end_time
+            ).join('；') + (unmatched.length > 2 ? ' 等' : ''),
         };
+        // 只有身份真的变了才收起弹层，普通刷新保留用户当前是否打开弹层
+        if (settings.role !== this.data.role) patch.showScopePicker = false;
         // 只有「首次进入 / 重新登录」才把周次重置回本周；
         // 取消、删除、下拉刷新都保持用户当前所在的周，避免连周次一起被甩回去。
         if (!keepScroll) {
@@ -170,6 +234,13 @@ Page({
             role: 'student',
             weekOffsetNum: 0,
             parityMode: parity,
+            scopeChipVisible: false,
+            showScopeTag: false,
+            showScopePicker: false,
+            scopeOptions: [],
+            unmatchedCount: 0,
+            unmatchedText: '',
+            showPeriodEditor: false,
         }, () => this.recompute());
     },
 
@@ -398,7 +469,8 @@ Page({
     async pickRole(event) {
         const key = event.currentTarget.dataset.key;
         if (!key) return;
-        this.setData({ showRolePicker: false });
+        // 身份变了，旧的归属选项已失效，顺手收起切换弹层
+        this.setData({ showRolePicker: false, showScopePicker: false });
         if (key === this.data.role) return;
         const result = await store.saveSettings({ role: key });
         if (result.error) {
@@ -410,6 +482,174 @@ Page({
         wx.showToast({ title: '已切换身份', icon: 'success' });
         // 切换身份后必须重新拉取云端课程，否则课表不会跟着变
         await this.loadAll();
+    },
+
+    // 家长切孩子、老师切班级 / 看全部班级
+    openScopePicker() {
+        if (this.data.demoMode) {
+            wx.showToast({ title: '登录后即可切换', icon: 'none' });
+            return;
+        }
+        const scope = scopes.scopeOf(this.settings || {});
+        // 一个孩子 / 班级都还没添加时直接进添加表单，
+        // 不再弹一个只有「全部班级」的空菜单让用户找不到入口。
+        if (scope.needsScope && scope.list.length === 0) {
+            this.goScopesAdd();
+            return;
+        }
+        this.setData({
+            showScopePicker: true,
+            scopeOptions: scopes.optionsOf(scope),
+            scopeTitle: scope.kind ? scope.kind.switchTitle : '',
+            scopeHint: scope.switchHint,
+            scopeManageLabel: scope.kind ? scope.kind.manageLabel : '',
+        });
+    },
+
+    closeScopePicker() {
+        this.setData({ showScopePicker: false });
+    },
+
+    async pickScope(event) {
+        const key = event.currentTarget.dataset.key;
+        if (!key) return;
+        this.setData({ showScopePicker: false });
+        const scope = scopes.scopeOf(this.settings || {});
+        if (key === scope.key) return;
+        if (key === scopes.ALL_SCOPE_KEY && scope.role !== 'teacher') return;
+        const result = await store.saveSettings({ active_scope: key });
+        if (result.error) {
+            wx.showToast({ title: result.error.message || '切换失败', icon: 'none' });
+            return;
+        }
+        this.settings = Object.assign({}, this.settings, result.data);
+        getApp().globalData.settings = this.settings;
+        wx.showToast({ title: key === scopes.ALL_SCOPE_KEY ? '已显示全部班级' : '已切换', icon: 'success' });
+        // 归属切换后重新拉云端课程，且保持当前所看的周与列
+        await this.loadAll({ keepScroll: true });
+    },
+
+    goScopes() {
+        this.setData({ showScopePicker: false });
+        wx.navigateTo({ url: '/pages/scopes/scopes' });
+    },
+
+    // 顶部常驻「＋ 管理孩子 / 班级」：直接打开管理页并弹出添加表单，
+    // 已添加一个之后也能立刻加第二个，不依赖切换弹层。
+    goScopesAdd() {
+        this.setData({ showScopePicker: false });
+        wx.navigateTo({ url: '/pages/scopes/scopes?action=add' });
+    },
+
+    // 时间不在现有节次内：去设置页增加 / 调整节次（家长 / 老师 / 学生通用）
+    goPeriodSettings() {
+        wx.navigateTo({ url: '/pages/settings/settings?focus=periods' });
+    },
+
+    // 点周视图左侧节次，直接弹出时间编辑
+    onPeriodRailTap(event) {
+        if (this.data.demoMode || this.data.authState !== 'signed-in') {
+            wx.showToast({ title: '登录后即可调整节次', icon: 'none' });
+            return;
+        }
+        const index = Number(event.currentTarget.dataset.index);
+        const rail = (this.data.timeRail || [])[index];
+        const sortNo = rail ? Number(rail.sort_no) : 0;
+        const period = sortNo
+            ? (this.periods || []).find(item => Number(item.sort_no) === sortNo)
+            : (this.periods || [])[index];
+        if (!period) return;
+        const startParts = timePartsOf(period.start_time);
+        const endParts = timePartsOf(period.end_time);
+        this.setData({
+            showPeriodEditor: true,
+            periodEditIndex: index,
+            periodEditSort: Number(period.sort_no || sortNo || index + 1),
+            periodEditLabel: period.label || ('第 ' + (index + 1) + ' 节'),
+            periodStartParts: startParts,
+            periodEndParts: endParts,
+            periodStartText: S.pad2(startParts[0]) + ':' + S.pad2(startParts[1]),
+            periodEndText: S.pad2(endParts[0]) + ':' + S.pad2(endParts[1]),
+            errorText: '',
+        });
+    },
+
+    closePeriodEditor() {
+        this.setData({ showPeriodEditor: false });
+    },
+
+    onPeriodTimeColumnChange(event) {
+        const which = event.currentTarget.dataset.which;
+        const column = Number(event.detail.column);
+        const value = Number(event.detail.value);
+        const key = which === 'end' ? 'periodEndParts' : 'periodStartParts';
+        const parts = (this.data[key] || [0, 0]).slice();
+        parts[column] = value;
+        const patch = {};
+        patch[key] = parts;
+        this.setData(patch);
+    },
+
+    onPeriodTimeChange(event) {
+        const which = event.currentTarget.dataset.which;
+        const picked = event.detail.value || [0, 0];
+        const parts = [Number(picked[0]) || 0, Number(picked[1]) || 0];
+        const text = S.pad2(parts[0]) + ':' + S.pad2(parts[1]);
+        const patch = {};
+        if (which === 'end') {
+            patch.periodEndParts = parts;
+            patch.periodEndText = text;
+        } else {
+            patch.periodStartParts = parts;
+            patch.periodStartText = text;
+        }
+        this.setData(patch);
+    },
+
+    async savePeriodTime() {
+        if (this.data.periodSaving) return;
+        const startText = this.data.periodStartText;
+        const endText = this.data.periodEndText;
+        const start = S.timeToMinutes(startText);
+        const end = S.timeToMinutes(endText);
+        if (start < 0 || end < 0 || end <= start) {
+            wx.showToast({ title: '结束时间要晚于开始时间', icon: 'none' });
+            return;
+        }
+        const periods = (this.periods || []).map(item => Object.assign({}, item));
+        const target = periods.findIndex(item => Number(item.sort_no) === Number(this.data.periodEditSort));
+        if (target < 0) return;
+        periods[target] = Object.assign({}, periods[target], {
+            start_time: startText,
+            end_time: endText,
+        });
+        // 相邻节次不能重叠，否则同一时段会同时显示两节课
+        const ordered = periods.slice().sort((a, b) =>
+            S.timeToMinutes(a.start_time) - S.timeToMinutes(b.start_time));
+        for (let i = 1; i < ordered.length; i += 1) {
+            if (S.timeToMinutes(ordered[i].start_time) < S.timeToMinutes(ordered[i - 1].end_time)) {
+                wx.showToast({ title: '与其它节次时间重叠，请调整', icon: 'none' });
+                return;
+            }
+        }
+        this.setData({ periodSaving: true });
+        let result;
+        try {
+            result = await store.replacePeriods(periods);
+        } catch (error) {
+            result = { error: { message: (error && error.message) || '保存失败，请重试' } };
+        }
+        this.setData({ periodSaving: false });
+        if (result.error) {
+            wx.showToast({ title: result.error.message || '保存失败', icon: 'none' });
+            return;
+        }
+        const saved = (result.data || []).map(item => Object.assign({}, item));
+        this.periods = saved;
+        getApp().globalData.periods = saved;
+        this.setData({ showPeriodEditor: false });
+        wx.showToast({ title: '节次时间已更新', icon: 'success' });
+        await this.loadAll({ keepScroll: true });
     },
 
     canManage() {

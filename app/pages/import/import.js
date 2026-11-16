@@ -1,4 +1,5 @@
 const store = require('../../utils/store');
+const scopes = require('../../utils/scopes');
 const importer = require('../../utils/importer');
 const template = require('../../utils/template');
 const S = require('../../utils/schedule');
@@ -139,6 +140,14 @@ Page({
         importing: false,
         fileName: '',
         storagePath: '',
+        scopeVisible: false,
+        scopeEmpty: false,
+        scopeTitle: '',
+        scopeFieldLabel: '',
+        scopeManageLabel: '',
+        scopeNames: [],
+        scopeIndex: 0,
+        scopeKey: '',
     },
 
     onLoad() {
@@ -172,7 +181,28 @@ Page({
             this.setData({ authState: 'signed-in', errorText: settingsResult.error.message || '加载设置失败' });
             return;
         }
-        this.setData({ authState: 'signed-in' });
+        // 家长 / 老师导入时必须明确「这批课属于哪个孩子 / 班级」
+        this.settings = settingsResult.data;
+        const scope = scopes.scopeOf(settingsResult.data);
+        this.scope = scope;
+        const list = scope.list || [];
+        const wantedKey = scopes.defaultWriteKey(scope);
+        let scopeIndex = list.findIndex(item => item.id === wantedKey);
+        if (scopeIndex < 0) scopeIndex = 0;
+        this.setData({
+            authState: 'signed-in',
+            scopeVisible: scope.needsScope,
+            scopeEmpty: scope.needsScope && list.length === 0,
+            scopeTitle: scope.kind ? '导入到' + scope.kind.noun : '',
+            scopeFieldLabel: scope.kind ? scope.kind.noun : '',
+            scopeManageLabel: scope.kind ? scope.kind.manageLabel : '',
+            scopeNames: list.map(item => {
+                const summary = scopes.summaryOf(item);
+                return summary ? item.name + ' · ' + summary : item.name;
+            }),
+            scopeIndex: scopeIndex,
+            scopeKey: list.length ? list[scopeIndex].id : '',
+        });
     },
 
     onSignedIn() {
@@ -182,6 +212,17 @@ Page({
 
     onDemo() {
         wx.switchTab({ url: '/pages/index/index' });
+    },
+
+    onScopeChange(event) {
+        const index = Number(event.detail.value) || 0;
+        const list = (this.scope && this.scope.list) || [];
+        if (!list[index]) return;
+        this.setData({ scopeIndex: index, scopeKey: list[index].id });
+    },
+
+    goScopes() {
+        wx.navigateTo({ url: '/pages/scopes/scopes' });
     },
 
     showError(message) {
@@ -377,6 +418,14 @@ Page({
             wx.showToast({ title: '请至少勾选一节课', icon: 'none' });
             return;
         }
+        if (this.data.scopeEmpty) {
+            wx.showToast({ title: '请先添加孩子 / 班级', icon: 'none' });
+            return;
+        }
+        if (this.data.scopeVisible && !this.data.scopeKey) {
+            wx.showToast({ title: '请选择导入到哪个孩子 / 班级', icon: 'none' });
+            return;
+        }
         if (this.data.importing) return;
         // 跨午夜课程（如 23:00–01:00）暂不支持：以前会被静默改成 45 分钟，
         // 现在先明确告知，避免课表看起来正常、实际时间却被改掉。
@@ -402,7 +451,14 @@ Page({
         let skipped = normalized.length - unique.length;
 
         // 2) 与云端已有课程比对：已经导入过的同一节课直接跳过，不再写入第二份
-        const existingResult = await store.listCourses();
+        // 只跟目标孩子 / 班级里已有的课比对：不同班级同一时间上同一门课是两节真实的课，
+        // 不该被当成重复导入跳过。
+        const targetScope = this.data.scopeVisible && this.data.scopeKey
+            ? Object.assign({}, this.scope, { key: this.data.scopeKey, isAll: false })
+            : null;
+        const existingResult = targetScope
+            ? await store.listCourses(undefined, { scope: targetScope })
+            : await store.listCourses();
         if (existingResult.error) {
             this.setData({ importing: false });
             this.showError(existingResult.error.message || '无法核对已有课程，请稍后重试');
@@ -458,6 +514,7 @@ Page({
             note: item.note,
             remind: true,
             lead_minutes: 15,
+            scope_key: this.data.scopeKey || '',
         }));
         const result = await store.createCoursesBatch(payload);
         this.setData({ importing: false });

@@ -56,10 +56,15 @@
                 </view>
                 <text class="role-switch">切换 ›</text>
             </view>
-            <text class="section-sub">学生 / 家长 / 老师各有一份独立课表，切换后自动加载；身份保存在云端</text>
+            <text class="section-sub">身份保存在云端；家长可添加多个孩子、老师可添加多个班级，每个孩子 / 班级各有一份独立课表</text>
         </view>
 
         <view class="card menu-card">
+            <view wx:if="{{scopeManageVisible}}" class="menu-item" bindtap="goScopes">
+                <text class="menu-icon">{{scopeIconText}}</text>
+                <text class="grow">{{scopeManageLabel}}（当前：{{scopeLabel}}）</text>
+                <text class="menu-arrow">›</text>
+            </view>
             <view class="menu-item" bindtap="goSettings">
                 <text class="menu-icon">⏰</text>
                 <text class="grow">作息节次调整、开学日期及提醒</text>

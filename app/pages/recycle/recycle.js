@@ -1,4 +1,5 @@
 const store = require('../../utils/store');
+const scopes = require('../../utils/scopes');
 const S = require('../../utils/schedule');
 
 Page({
@@ -41,7 +42,7 @@ Page({
         this.setData({
             loading: false,
             errorText: '',
-            items: S.styledCourses(result.data || []),
+            items: S.styledCourses(scopes.decorate(result.data || [], settingsResult.data)),
         });
     },
 
