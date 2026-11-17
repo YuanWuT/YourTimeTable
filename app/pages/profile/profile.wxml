@@ -56,7 +56,7 @@
                 </view>
                 <text class="role-switch">切换 ›</text>
             </view>
-            <text class="section-sub">身份保存在云端；家长可添加多个孩子、老师可添加多个班级，每个孩子 / 班级各有一份独立课表</text>
+            <text class="section-sub">{{roleIntro}}</text>
         </view>
 
         <view class="card menu-card">
@@ -84,7 +84,7 @@
 
         <view class="card about-card">
             <text class="section-title">关于「你的课程表」</text>
-            <text class="section-sub">支持周一到周日、单双周、月视图，手动录入、拍照识别与 Excel 导入。数据按微信登录身份保存在云端，换手机登录后课表自动恢复。</text>
+            <text class="section-sub">支持周一到周日、单双周、月视图，手动录入、拍照识别与 Excel 导入。数据按微信登录身份保存，换手机后登录可查看课表。</text>
         </view>
 
         <button class="plain-btn signout-btn" loading="{{signOutBusy}}" disabled="{{signOutBusy}}" bindtap="signOut">退出登录</button>

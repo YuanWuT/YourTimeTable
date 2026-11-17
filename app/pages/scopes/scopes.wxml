@@ -72,7 +72,8 @@
     <view wx:if="{{editorVisible}}" class="editor-sheet" catchtap="noop">
         <view class="sheet-handle"></view>
         <text class="section-title">{{editorTitle}}</text>
-        <text class="section-sub">名称用于切换课表；选男孩 / 女孩后课表页会显示对应头像，其余信息只用于区分</text>
+        <text class="section-sub" wx:if="{{isParent}}">名称用于切换课表；选男孩 / 女孩后课表页会显示对应头像，其余信息只用于区分</text>
+        <text class="section-sub" wx:else>班级名称用于切换课表，年级、科目和备注只用于区分不同班级</text>
         <scroll-view scroll-y class="editor-body">
             <view class="field">
                 <text class="field-label">{{kind.nameLabel}} *</text>

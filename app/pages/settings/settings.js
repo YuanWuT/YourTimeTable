@@ -5,6 +5,57 @@ const S = require('../../utils/schedule');
 const LEAD_OPTIONS = [0, 5, 10, 15, 20, 30, 45, 60];
 const PERIOD_COUNT_OPTIONS = [4, 5, 6, 7, 8, 10, 12];
 
+// 时间用「小时 / 分钟」两列滑动选择，跟课程编辑页一致，不再手动填冒号。
+const HOURS = [];
+const MINUTES = [];
+for (let h = 0; h < 24; h += 1) HOURS.push(S.pad2(h));
+for (let m = 0; m < 60; m += 1) MINUTES.push(S.pad2(m));
+const TIME_RANGE = [HOURS, MINUTES];
+
+function timeParts(value) {
+    const normalized = S.normalizeTime(value) || '08:00';
+    const pieces = normalized.split(':');
+    return [Number(pieces[0]), Number(pieces[1])];
+}
+
+// 每个节次带上 picker 需要的时/分列，展示与取值都从同一个来源推导。
+function decoratePeriods(list) {
+    return (list || []).map(item => {
+        const row = Object.assign({}, item);
+        row.startParts = timeParts(row.start_time);
+        row.endParts = timeParts(row.end_time);
+        return row;
+    });
+}
+
+// 写云端前去掉仅供界面使用的列，避免把多余字段带进数据库。
+function plainPeriods(list) {
+    return (list || []).map(item => {
+        const row = Object.assign({}, item);
+        delete row.startParts;
+        delete row.endParts;
+        return row;
+    });
+}
+
+// 选完开始 / 结束时间后，若结束不再晚于开始，自动补一节课时长，
+// 避免出现 17:00–08:45 这种无效区间。
+function applyPeriodTime(list, index, field, picked) {
+    const periods = (list || []).map(item => Object.assign({}, item));
+    const row = periods[index];
+    if (!row) return { periods: periods, changed: false };
+    const hour = Math.min(23, Math.max(0, Number(picked[0]) || 0));
+    const minute = Math.min(59, Math.max(0, Number(picked[1]) || 0));
+    row[field] = S.pad2(hour) + ':' + S.pad2(minute);
+    let changed = false;
+    if (S.timeToMinutes(row.end_time) <= S.timeToMinutes(row.start_time)) {
+        const next = Math.min(23 * 60 + 59, S.timeToMinutes(row.start_time) + 45);
+        row.end_time = S.pad2(Math.floor(next / 60)) + ':' + S.pad2(next % 60);
+        changed = true;
+    }
+    return { periods: decoratePeriods(periods), changed: changed };
+}
+
 Page({
     data: {
         authState: 'checking',
@@ -25,6 +76,7 @@ Page({
         periodCountOptions: PERIOD_COUNT_OPTIONS,
         periodCountLabels: PERIOD_COUNT_OPTIONS.map(n => n + ' 节'),
         periodCountIndex: 3,
+        timeRange: TIME_RANGE,
     },
 
     onLoad(options) {
@@ -94,7 +146,7 @@ Page({
             loading: false,
             errorText: '',
             termStart: settings.term_start,
-            periods: periods.map(item => Object.assign({}, item)),
+            periods: decoratePeriods(periods),
             remindEnabled: settings.remind_enabled,
             leadOptions: leadOptions,
             leadLabels: leadOptions.map(value => value === 0 ? '上课时提醒' : '提前 ' + value + ' 分钟'),
@@ -182,6 +234,34 @@ Page({
         this.setData({ periods: periods, errorText: '' });
     },
 
+    // 滑动某一列时先更新 picker 的选中列，确认时再拼成 HH:MM。
+    onPeriodTimeColumnChange(event) {
+        const index = Number(event.currentTarget.dataset.index);
+        const field = event.currentTarget.dataset.field;
+        const column = Number(event.detail.column);
+        const value = Number(event.detail.value);
+        const periods = this.data.periods.slice();
+        if (!periods[index]) return;
+        const key = field === 'end_time' ? 'endParts' : 'startParts';
+        const parts = (periods[index][key] || [0, 0]).slice();
+        parts[column] = value;
+        periods[index] = Object.assign({}, periods[index]);
+        periods[index][key] = parts;
+        this.setData({ periods: periods });
+    },
+
+    // 选完时 / 分自动拼成 HH:MM，结束时间不再早于开始时间。
+    onPeriodTimeChange(event) {
+        const index = Number(event.currentTarget.dataset.index);
+        const field = event.currentTarget.dataset.field;
+        if (field !== 'start_time' && field !== 'end_time') return;
+        const picked = event.detail.value || [0, 0];
+        const result = applyPeriodTime(this.data.periods, index, field, picked);
+        this.setData({ periods: result.periods, errorText: '' }, () => {
+            if (result.changed) wx.showToast({ title: '结束时间已自动调整', icon: 'none' });
+        });
+    },
+
     async addPeriod() {
         const periods = this.data.periods.slice();
         if (periods.length >= 16) {
@@ -210,14 +290,14 @@ Page({
             wx.showToast({ title: message, icon: 'none' });
             return;
         }
-        this.setData({ periods: next, saving: true, errorText: '' });
-        const result = await store.replacePeriods(next);
+        this.setData({ periods: decoratePeriods(next), saving: true, errorText: '' });
+        const result = await store.replacePeriods(plainPeriods(next));
         this.setData({ saving: false });
         if (result.error) {
             this.setData({ errorText: result.error.message || '保存作息失败' });
             return;
         }
-        const saved = (result.data || []).map(item => Object.assign({}, item));
+        const saved = decoratePeriods(result.data || []);
         const countOptions = (this.data.periodCountOptions || PERIOD_COUNT_OPTIONS).slice();
         if (countOptions.indexOf(saved.length) < 0) {
             countOptions.push(saved.length);
@@ -296,13 +376,13 @@ Page({
             return;
         }
         this.setData({ saving: true, errorText: '' });
-        const result = await store.replacePeriods(this.data.periods);
+        const result = await store.replacePeriods(plainPeriods(this.data.periods));
         this.setData({ saving: false });
         if (result.error) {
             this.setData({ errorText: result.error.message || '保存作息失败' });
             return;
         }
-        const saved = (result.data || []).map(item => Object.assign({}, item));
+        const saved = decoratePeriods(result.data || []);
         const countOptions = (this.data.periodCountOptions || PERIOD_COUNT_OPTIONS).slice();
         if (countOptions.indexOf(saved.length) < 0) {
             countOptions.push(saved.length);

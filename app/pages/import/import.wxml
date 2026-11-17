@@ -96,6 +96,7 @@
         <!-- 表格格式说明 -->
         <view class="card format-card">
             <text class="section-title">Excel 表格怎么填</text>
+            <text class="section-sub">模板里的时间段已按你当前的作息节次生成，下载后直接填课程即可</text>
             <view class="format-block">
                 <text class="format-label">方式一 · 一行一节课</text>
                 <text class="format-text">表头包含：课程名称、星期、开始时间、结束时间、地点、教师、单双周（可选）</text>

@@ -3,6 +3,13 @@ const { ROLES } = require('../../utils/config');
 const store = require('../../utils/store');
 const scopes = require('../../utils/scopes');
 
+// 身份介绍按当前角色展示：家长只看孩子、老师只看班级，不交叉提到另一种角色。
+function roleIntroOf(role) {
+    if (role === 'parent') return '身份保存在云端；家长可添加多个孩子，每个孩子各有一份独立课表';
+    if (role === 'teacher') return '身份保存在云端；老师可添加多个班级，每个班级各有一份独立课表';
+    return '身份保存在云端；学生课表独立保存，换手机登录仍可查看';
+}
+
 Page({
     data: {
         authState: 'checking',
@@ -15,6 +22,7 @@ Page({
         roleName: '学生',
         roleIcon: '🎒',
         roleDesc: '管理我自己的课表',
+        roleIntro: '身份保存在云端；学生课表独立保存，换手机登录仍可查看',
         roleOptions: [],
         showRolePicker: false,
         scopeManageVisible: false,
@@ -78,6 +86,7 @@ Page({
             roleName: role.name,
             roleIcon: role.icon,
             roleDesc: role.desc,
+            roleIntro: roleIntroOf(role.key),
             scopeManageVisible: scope.needsScope,
             scopeLabel: scope.empty ? '尚未添加' : scope.label,
             scopeManageLabel: scope.kind ? scope.kind.manageLabel : '',

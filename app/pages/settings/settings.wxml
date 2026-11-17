@@ -31,7 +31,7 @@
                 <text class="section-title">作息节次</text>
                 <text class="link-text" bindtap="resetPeriods">恢复默认</text>
             </view>
-            <text class="section-sub">新增 / 删除节次、快捷设节数会立即生效；只修改时间后需点「保存作息」。只有 6 节课可直接选「6 节」</text>
+            <text class="section-sub">时间用滑动选择，改开始时间后结束时间自动顺延；新增 / 删除节次、快捷设节数会立即生效，改完时间记得点「保存作息」</text>
 
             <view class="quick-row">
                 <text class="quick-label">快捷设节数</text>
@@ -50,10 +50,24 @@
             <view wx:for="{{periods}}" wx:key="sort_no" class="period-row">
                 <input class="period-input ph-label" value="{{item.label}}" placeholder="第 N 节"
                        placeholder-class="input-placeholder" data-index="{{index}}" data-field="label" bindinput="onPeriodInput" />
-                <input class="period-input ph-time" value="{{item.start_time}}" placeholder="08:00"
-                       placeholder-class="input-placeholder" data-index="{{index}}" data-field="start_time" bindinput="onPeriodInput" maxlength="5" />
-                <input class="period-input ph-time" value="{{item.end_time}}" placeholder="08:45"
-                       placeholder-class="input-placeholder" data-index="{{index}}" data-field="end_time" bindinput="onPeriodInput" maxlength="5" />
+                <picker class="ph-time" mode="multiSelector" range="{{timeRange}}" value="{{item.startParts}}"
+                        data-index="{{index}}" data-field="start_time"
+                        bindcolumnchange="onPeriodTimeColumnChange" bindchange="onPeriodTimeChange">
+                    <view class="picker-value period-time-picker">
+                        <text class="time-part">{{item.startParts[0]}}</text><text class="time-unit">时</text>
+                        <text class="time-part">{{item.startParts[1]}}</text><text class="time-unit">分</text>
+                        <text class="picker-arrow">›</text>
+                    </view>
+                </picker>
+                <picker class="ph-time" mode="multiSelector" range="{{timeRange}}" value="{{item.endParts}}"
+                        data-index="{{index}}" data-field="end_time"
+                        bindcolumnchange="onPeriodTimeColumnChange" bindchange="onPeriodTimeChange">
+                    <view class="picker-value period-time-picker">
+                        <text class="time-part">{{item.endParts[0]}}</text><text class="time-unit">时</text>
+                        <text class="time-part">{{item.endParts[1]}}</text><text class="time-unit">分</text>
+                        <text class="picker-arrow">›</text>
+                    </view>
+                </picker>
                 <view class="ph-del" data-index="{{index}}" bindtap="removePeriod"><text class="del-text">删除</text></view>
             </view>
 

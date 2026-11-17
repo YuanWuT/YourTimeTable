@@ -557,7 +557,8 @@ Page({
         const format = (event.currentTarget.dataset && event.currentTarget.dataset.format) || 'single';
         const config = template.FORMATS[format] || template.FORMATS.single;
         try {
-            const buffer = template.buildXlsxTemplate(format);
+            // 模板时间段跟随当前作息节次，下载后直接填课名即可。
+            const buffer = template.buildXlsxTemplate(format, this.periods || []);
             const base = (wx.env && wx.env.USER_DATA_PATH) || 'wxfile://usr';
             const filePath = base + '/' + config.fileName;
             wx.getFileSystemManager().writeFileSync(filePath, buffer);
@@ -567,7 +568,8 @@ Page({
                     fileName: config.fileName,
                     success: () => wx.showModal({
                         title: '模板已发送到聊天',
-                        content: '用 Excel / WPS 打开聊天里的模板，填好课程后发回微信，再回到本页点「Excel / CSV 表格」选择导入。\n\n表头：' + template.SINGLE_HEADERS.join('、'),
+                        content: '时间段已按当前作息节次生成，直接填课名即可。用 Excel / WPS 打开填好后发回微信，再回到本页点「Excel / CSV 表格」导入。\n\n表头：'
+                            + (format === 'matrix' ? template.MATRIX_HEADERS.join('、') : template.SINGLE_HEADERS.join('、')),
                         showCancel: false,
                         confirmText: '我知道了',
                     }),

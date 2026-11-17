@@ -213,8 +213,51 @@ function sheetXml(rows) {
         + '</worksheet>';
 }
 
-function buildXlsxTemplate(format) {
+// 按当前作息节次生成模板行：矩阵模板的时间段列、一行一节课模板的示例时间
+// 都用真实节次，用户下载后直接填课名即可，不用再对着写死的示例改时间。
+// 没有节次时退回内置示例，保证首次使用（还没设作息）也能下载。
+function validTime(value) {
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ''));
+}
+
+function minutes(value) {
+    const pieces = String(value).split(':');
+    return Number(pieces[0]) * 60 + Number(pieces[1]);
+}
+
+function buildTemplateRows(format, periods) {
     const config = FORMATS[format] || FORMATS.single;
+    const list = (Array.isArray(periods) ? periods : []).filter(item =>
+        item && validTime(item.start_time) && validTime(item.end_time)
+        && minutes(item.end_time) > minutes(item.start_time));
+    if (list.length === 0) return config.rows;
+
+    if (format === 'matrix') {
+        const rows = [MATRIX_HEADERS.slice()];
+        list.forEach(item => {
+            const row = MATRIX_HEADERS.map(() => '');
+            row[0] = item.start_time + '-' + item.end_time;
+            rows.push(row);
+        });
+        return rows;
+    }
+
+    const samples = [
+        ['高等数学', '周一', '教三 201', '张老师', '每周', '带练习册'],
+        ['大学英语', '周三', '外语楼 305', '李老师', '单周', ''],
+    ];
+    const rows = [SINGLE_HEADERS.slice()];
+    list.slice(0, samples.length).forEach((item, i) => {
+        const sample = samples[i];
+        rows.push([sample[0], sample[1], item.start_time, item.end_time,
+            sample[2], sample[3], sample[4], sample[5]]);
+    });
+    return rows;
+}
+
+function buildXlsxTemplate(format, periods) {
+    const config = FORMATS[format] || FORMATS.single;
+    const rows = buildTemplateRows(format, periods);
     const workbook = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
         + 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
@@ -260,7 +303,7 @@ function buildXlsxTemplate(format) {
                 + '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
                 + '</styleSheet>'),
         },
-        { name: 'xl/worksheets/sheet1.xml', data: utf8Bytes(sheetXml(config.rows)) },
+        { name: 'xl/worksheets/sheet1.xml', data: utf8Bytes(sheetXml(rows)) },
     ];
     return buildZip(files);
 }
@@ -272,5 +315,6 @@ module.exports = {
     MATRIX_HEADERS: MATRIX_HEADERS,
     MATRIX_ROWS: MATRIX_ROWS,
     buildXlsxTemplate: buildXlsxTemplate,
+    buildTemplateRows: buildTemplateRows,
     sheetXml: sheetXml,
 };
